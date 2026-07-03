@@ -84,12 +84,26 @@ def download_backport(ppsaid, info):
     # Download chunks
     for i, link in enumerate(info['download_links']):
         print(f"Downloading chunk {i+1}/{len(info['download_links'])}...")
-        # Implement download logic here
-        # Handle Google Drive, MediaFire, etc.
         
-    # Merge chunks if needed
-    # Extract fakelib
-    
+        # Parse out a filename or fall back to an index format
+        filename = link.split('/')[-1].split('?')[0]
+        if not filename.endswith('.pkg'):
+            filename = f"{ppsaid}_part{i+1}.pkg"
+            
+        target_path = game_dir / filename
+        
+        try:
+            # Stream download to disk in 1MB pieces
+            with requests.get(link, stream=True, timeout=60) as r:
+                r.raise_for_status()
+                with open(target_path, 'wb') as f:
+                    for chunk in r.iter_content(chunk_size=1024 * 1024):
+                        if chunk:
+                            f.write(chunk)
+            print(f"Finished downloading: {filename}")
+        except Exception as e:
+            print(f"Error handling chunk from {link}: {e}")
+            
     return game_dir
 
 def main():
