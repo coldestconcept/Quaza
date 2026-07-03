@@ -1,13 +1,21 @@
 // Derive the PS5 payload host dynamically so this works from any device
 // (PC, phone, another PS5) pointed at the same IP — never hardcode localhost.
+// When served over HTTPS (e.g. a web preview), the browser blocks plain-HTTP
+// fetches as mixed content; detect that case up front so the UI stays usable
+// instead of every request silently failing.
 const API_HOST = window.location.hostname || '127.0.0.1';
 const API_BASE = `http://${API_HOST}:4242`;
+const API_REACHABLE = window.location.protocol === 'http:' || window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
 
 // Check payload connection on page load
-fetch(`${API_BASE}/api/status`)
-    .then(res => res.json())
-    .then(data => console.log('Payload connected:', data))
-    .catch(() => console.warn('Payload not reachable — ensure the ELF is loaded on your PS5.'));
+if (API_REACHABLE) {
+    fetch(`${API_BASE}/api/status`)
+        .then(res => res.json())
+        .then(data => console.log('Payload connected:', data))
+        .catch(() => console.warn('Payload not reachable — ensure the ELF is loaded on your PS5.'));
+} else {
+    console.warn('Preview context: payload API is not reachable from this origin. UI is view-only.');
+}
 
 // ── Auto-detect Content ID from dump path ────────────────────────────────
 // When the user finishes typing a dump path, query the payload for the
