@@ -1,11 +1,15 @@
-# Building PS5 PKG Tool
+# Building Quaza
 
 ## Prerequisites
-- ps5-payload-sdk or sleirsgoevy toolchain
-- Python 3.8+ (for scraper)
-- PS5 with jailbreak (etaHEN, kstuff, etc.)
 
-## Build Payload
+- Linux development environment (Ubuntu/Debian recommended)
+- PS5 Payload SDK installed
+- CMake 3.20+
+
+## Install PS5 Payload SDK
+
 ```bash
-cd payload
+git clone https://github.com/ps5-payload-dev/sdk.git
+cd sdk
 make
+sudo make DESTDIR=/opt/ps5-payload-sdk install
