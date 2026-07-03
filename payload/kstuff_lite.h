@@ -2,14 +2,26 @@
 #define KSTUFF_LITE_H
 
 /*
- * kstuff-lite interface
+ * kstuff-lite bridge interface
  * Source: https://github.com/sleirsgoevy/ps5-kstuff
  *
  * Provides kernel read/write and privileged syscall execution needed to
  * write to restricted paths (/user/app/) and call internal PS5 APIs
  * that are normally blocked from user-land.
  *
- * Link with -lkstuff (provided by the PS5 Payload SDK kstuff-lite package).
+ * ┌─ IMPORTANT ────────────────────────────────────────────────────────┐
+ * │ Quaza does NOT ship, install, or bundle kstuff-lite.               │
+ * │ These declarations resolve at runtime against an ALREADY-RUNNING   │
+ * │ kstuff bridge socket (/dev/kstuff or /tmp/kstuff.sock).            │
+ * │                                                                    │
+ * │ On FW 12.70 (latest jailbreakable as of mid-2026):                 │
+ * │   Inject ps5-payload-elfldr + kstuff-lite FIRST, then inject Quaza.│
+ * │                                                                    │
+ * │ NEVER call kstuff_init() without first calling jailbreak_detect(). │
+ * │ Calling it with no bridge running will kernel-panic the PS5.       │
+ * └────────────────────────────────────────────────────────────────────┘
+ *
+ * Link with -lkstuff_stub (import stub from PS5 Payload SDK).
  */
 
 #include <stdint.h>

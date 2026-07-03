@@ -21,11 +21,24 @@
 int self_install_is_done(void);
 
 /*
+ * Return codes for self_install_run().
+ */
+typedef enum {
+    INSTALL_OK      =  0,   /* installed (or was already installed)          */
+    INSTALL_SKIPPED =  1,   /* no jailbreak bridge detected — skipped safely */
+    INSTALL_ERROR   = -1,   /* install attempted but failed                  */
+} install_result_t;
+
+/*
  * self_install_run
  * Performs the full installation using kstuff-lite + sceAppInstUtil.
- * Safe to call every run — exits early if already installed.
- * Returns 0 on success, -1 on failure.
+ * Safe to call every run — exits early if already installed or if no
+ * supported jailbreak is detected (returns INSTALL_SKIPPED, not an error).
+ *
+ *   INSTALL_OK      — installed successfully (or sentinel already present)
+ *   INSTALL_SKIPPED — kstuff bridge not found; skipped, server still runs
+ *   INSTALL_ERROR   — install was attempted but a step failed
  */
-int self_install_run(void);
+install_result_t self_install_run(void);
 
 #endif /* SELF_INSTALL_H */

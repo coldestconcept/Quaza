@@ -57,12 +57,18 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/libprosperopkg/include
     ${PS5_SDK}/include
     ${PS5_SDK}/common
-    ${PS5_SDK}/include/kstuff      # kstuff-lite headers
+    # kstuff-lite headers (from the PS5 Payload SDK — NOT bundled with Quaza;
+    # kstuff must already be running in the system before the ELF is injected)
+    ${PS5_SDK}/include/kstuff
 )
 
 link_directories(
     ${PS5_SDK}/lib
-    ${PS5_SDK}/lib/kstuff          # kstuff-lite static lib
+    # No ${PS5_SDK}/lib/kstuff — we do NOT link kstuff statically.
+    # At runtime we call through the already-running kstuff bridge socket.
+    # The kstuff_lite.h declarations are resolved via the SDK import library
+    # (libkstuff_stub.a), which connects to /dev/kstuff or /tmp/kstuff.sock.
+    ${PS5_SDK}/lib/kstuff_stub
 )
 
 # ── Source files ─────────────────────────────────────────────────────────
@@ -71,6 +77,7 @@ set(SOURCE_FILES
     pkg_server.c
     param_sfo.c
     browser_launch.c
+    jailbreak_detect.c
     self_install.c
     libprosperopkg/src/pfs_builder.c
     libprosperopkg/src/pfs_directory.c
@@ -101,7 +108,11 @@ target_link_libraries(quaza_payload.elf
     SceLncUtil           # sceLncUtilLaunchWebBrowser2
     SceAppInstUtil       # sceAppInstUtil* — app installation APIs
     SceUserService       # sceUserServiceInitialize
-    kstuff               # kstuff-lite — kernel r/w + privilege escalation
+    kstuff_stub          # import stub — resolves at runtime against the
+                         # kstuff bridge already running in the system.
+                         # Quaza does NOT ship or install kstuff-lite;
+                         # it requires the user to have it active first
+                         # (standard on FW 12.70 via ps5-payload-elfldr).
     pthread
 )
 

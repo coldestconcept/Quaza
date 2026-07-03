@@ -1,6 +1,7 @@
 #include "self_install.h"
-#include "kstuff_lite.h"
-#include "sfo_embed.h"      /* g_param_sfo_data / g_param_sfo_size  */
+#include "jailbreak_detect.h"   /* safe pre-flight check — no kstuff APIs */
+#include "kstuff_lite.h"        /* bridge to already-running kstuff        */
+#include "sfo_embed.h"          /* g_param_sfo_data / g_param_sfo_size     */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -124,20 +125,44 @@ int self_install_is_done(void) {
 }
 
 /* ── Main install routine ────────────────────────────────────────────── */
-int self_install_run(void) {
+install_result_t self_install_run(void) {
     if (self_install_is_done()) {
         printf("[install] Already installed — skipping.\n");
-        return 0;
+        return INSTALL_OK;
     }
 
     printf("[install] First run detected — installing Quaza to game library...\n");
 
-    /* ── Step 1: kstuff-lite — escalate privileges ───────────────────── */
-    printf("[install] Initialising kstuff-lite...\n");
+    /* ── Step 1: detect active jailbreak BEFORE touching any kernel API ── */
+    /*
+     * Calling kstuff_init() without an active kstuff bridge will kernel-panic
+     * the PS5.  We inspect filesystem paths only (no kstuff calls) to confirm
+     * the bridge is already running before we ever talk to it.
+     *
+     * Supported environments:
+     *   FW ≤9.xx  — GoldHEN / etaHEN (both load kstuff internally)
+     *   FW ≤12.70 — kstuff-lite via ps5-payload-elfldr (current standard)
+     *
+     * Quaza does NOT ship or install kstuff-lite; it must already be active.
+     */
+    jb_type_t jb = jailbreak_detect();
+    printf("[install] Jailbreak environment: %s\n", jailbreak_name(jb));
+
+    if (!jailbreak_can_install(jb)) {
+        /* Expected on a device where kstuff isn't loaded yet — not an error */
+        printf("[install] No kstuff bridge found (/dev/kstuff or /tmp/kstuff.sock).\n"
+               "[install]   On FW 12.70: inject ps5-payload-elfldr + kstuff FIRST,\n"
+               "[install]   then re-inject this ELF to auto-install to the game library.\n"
+               "[install]   Continuing as injected payload — all features still work.\n");
+        return INSTALL_SKIPPED;
+    }
+
+    /* Bridge confirmed present — now safe to initialise it */
+    printf("[install] Connecting to kstuff-lite bridge...\n");
     if (kstuff_init() != 0) {
-        fprintf(stderr, "[install] kstuff_init() failed — cannot write to /user/app/\n");
-        fprintf(stderr, "[install] Ensure the jailbreak (GoldHEN / etaHEN) is active.\n");
-        return -1;
+        fprintf(stderr, "[install] kstuff_init() failed even though bridge path exists.\n"
+                        "[install]   The bridge process may have crashed — re-inject kstuff.\n");
+        return INSTALL_ERROR;
     }
     printf("[install] kstuff-lite ready.\n");
 
@@ -154,13 +179,13 @@ int self_install_run(void) {
     if (rc != 0) {
         fprintf(stderr, "[install] sceUserServiceInitialize() rc=0x%08x\n",
                 (unsigned)rc);
-        return -1;
+        return INSTALL_ERROR;
     }
     rc = sceAppInstUtilInitialize();
     if (rc != 0) {
         fprintf(stderr, "[install] sceAppInstUtilInitialize() rc=0x%08x\n",
                 (unsigned)rc);
-        return -1;
+        return INSTALL_ERROR;
     }
 
     /* ── Step 3: reserve the TITLE_ID slot in the content database ──── */
@@ -169,7 +194,7 @@ int self_install_run(void) {
     if (rc != 0 && (unsigned)rc != SCE_APPINSTUTIL_ERROR_ALREADY_EXISTS) {
         fprintf(stderr, "[install] sceAppInstUtilAppPrepareInstall() "
                 "rc=0x%08x — aborting.\n", (unsigned)rc);
-        return -1;
+        return INSTALL_ERROR;
     }
     if ((unsigned)rc == SCE_APPINSTUTIL_ERROR_ALREADY_EXISTS)
         printf("[install] Title slot already reserved — continuing.\n");
@@ -177,12 +202,12 @@ int self_install_run(void) {
     /* ── Step 4: write the app directory structure ───────────────────── */
     printf("[install] Creating app directory structure...\n");
 
-    if (mkdirs(INSTALL_BASE "/sce_sys") != 0) return -1;
+    if (mkdirs(INSTALL_BASE "/sce_sys") != 0) return INSTALL_ERROR;
 
     /* param.sfo — embedded at build time by gen_param_sfo.py */
     printf("[install] Writing param.sfo...\n");
     if (write_file(INSTALL_BASE "/sce_sys/param.sfo",
-                   g_param_sfo_data, g_param_sfo_size) != 0) return -1;
+                   g_param_sfo_data, g_param_sfo_size) != 0) return INSTALL_ERROR;
 
     /* icon0.png — look alongside the ELF; skip (default icon) if absent */
     const char *icon_src = "/data/pkg_tool/sce_sys/icon0.png";
@@ -212,7 +237,7 @@ int self_install_run(void) {
 
     /* eboot.bin — self-copy so clicking the icon re-launches us */
     printf("[install] Writing eboot.bin (self-copy)...\n");
-    if (copy_self(INSTALL_BASE "/eboot.bin") != 0) return -1;
+    if (copy_self(INSTALL_BASE "/eboot.bin") != 0) return INSTALL_ERROR;
 
     /* ── Step 5: register with the PS5 content database ─────────────── */
     printf("[install] Registering with PS5 content database...\n");
@@ -229,7 +254,7 @@ int self_install_run(void) {
         fprintf(stderr, "[install] sceAppInstUtilAppRecover() rc=0x%08x "
                 "— DB refresh may not have taken effect.\n", (unsigned)rc);
         /* Still considered a failed install; do NOT write sentinel. */
-        return -1;
+        return INSTALL_ERROR;
     }
 
     /* ── Step 6: write sentinel ONLY on confirmed success ────────────── */
@@ -242,5 +267,5 @@ int self_install_run(void) {
            "It will appear in your PS5 game library.\n");
     printf("[install]   You can now launch it from the library "
            "instead of injecting the ELF.\n");
-    return 0;
+    return INSTALL_OK;
 }

@@ -68,9 +68,19 @@ int main(int argc, char **argv) {
     signal(SIGTERM, signal_handler);
 
     /* ── 1. Auto-install to game library (first run only) ────────────── */
-    if (self_install_run() != 0) {
-        /* Non-fatal — log the warning and continue running as a raw ELF */
-        fprintf(stderr, "[main] Self-install failed; continuing as injected payload.\n");
+    switch (self_install_run()) {
+    case INSTALL_OK:
+        printf("[main] Game library install complete.\n");
+        break;
+    case INSTALL_SKIPPED:
+        /* kstuff not yet active — expected on first injection without kstuff */
+        printf("[main] Install skipped (no kstuff bridge). "
+               "Re-inject after loading kstuff to auto-install to game library.\n");
+        break;
+    case INSTALL_ERROR:
+        fprintf(stderr, "[main] Install attempted but failed — "
+                "continuing as injected payload.\n");
+        break;
     }
 
     /* ── 2. Initialise HTTP server ────────────────────────────────────── */
