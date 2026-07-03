@@ -4,18 +4,17 @@ const API_BASE = `http://${window.location.hostname || '127.0.0.1'}:4242`;
 
 let progressInterval = null;
 
+// ── Status helpers ───────────────────────────────────────────────────────
 function showStatus(message, type) {
     const status = document.getElementById('status');
-    status.className = 'status ' + type + ' active';
-    // Use textContent for plain messages; caller uses setDownloadLink() for links.
+    status.className = 'status-msg ' + type + ' active';
     status.textContent = message;
 }
 
 function setDownloadLink(outputPath) {
     const status = document.getElementById('status');
-    status.className = 'status success active';
+    status.className = 'status-msg success active';
     status.textContent = 'Conversion complete! ';
-
     const link = document.createElement('a');
     link.href = `${API_BASE}/api/pkg/download?path=${encodeURIComponent(outputPath)}`;
     link.className = 'download-link';
@@ -25,19 +24,63 @@ function setDownloadLink(outputPath) {
 }
 
 function hideStatus() {
-    document.getElementById('status').className = 'status';
+    const el = document.getElementById('status');
+    if (el) el.className = 'status-msg';
 }
 
 function updateProgress(percent, statusText, currentFile) {
-    document.getElementById('progressFill').style.width = percent + '%';
+    document.getElementById('progressFill').style.width   = percent + '%';
     document.getElementById('progressPercent').textContent = percent + '%';
-    document.getElementById('progressStatus').textContent = statusText;
-    document.getElementById('currentFile').textContent = currentFile || '';
+    document.getElementById('progressStatus').textContent  = statusText;
+    document.getElementById('currentFile').textContent     = currentFile || '';
 }
 
+// ── Auto-detect Content ID ───────────────────────────────────────────────
+const dumpPathInput  = document.getElementById('dumpPath');
+const contentIdInput = document.getElementById('contentId');
+const autoHint       = document.getElementById('autoDetectHint');
+
+function autoDetectContentId(path) {
+    if (!path) return;
+    if (autoHint) { autoHint.textContent = 'Detecting…'; autoHint.style.color = '#4a8aaa'; }
+
+    fetch(`${API_BASE}/api/sfo/parse?path=${encodeURIComponent(path)}`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.content_id) {
+                contentIdInput.value = data.content_id;
+                if (autoHint) {
+                    autoHint.textContent = '✓ Content ID detected from param.sfo';
+                    autoHint.style.color = '#1a5c30';
+                }
+            } else {
+                if (autoHint) {
+                    autoHint.textContent = 'Could not detect — enter Content ID manually.';
+                    autoHint.style.color = '#8a5500';
+                }
+            }
+        })
+        .catch(() => {
+            if (autoHint) {
+                autoHint.textContent = 'Found in the game\'s param.sfo file.';
+                autoHint.style.color = '#4a8aaa';
+            }
+        });
+}
+
+if (dumpPathInput) {
+    dumpPathInput.addEventListener('blur', () => {
+        autoDetectContentId(dumpPathInput.value.trim());
+    });
+    dumpPathInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') autoDetectContentId(dumpPathInput.value.trim());
+    });
+}
+
+// ── Conversion ───────────────────────────────────────────────────────────
 function startConversion() {
-    const dumpPath  = document.getElementById('dumpPath').value;
-    const contentId = document.getElementById('contentId').value;
+    const dumpPath  = dumpPathInput.value.trim();
+    const contentId = contentIdInput.value.trim();
     const btn = document.getElementById('convertBtn');
 
     if (!dumpPath || !contentId) {
@@ -45,7 +88,6 @@ function startConversion() {
         return;
     }
 
-    // Reset UI
     hideStatus();
     document.getElementById('progressContainer').classList.add('active');
     btn.disabled = true;
@@ -79,7 +121,7 @@ function pollProgress() {
                 return res.json();
             })
             .then(data => {
-                failureCount = 0; // reset on success
+                failureCount = 0;
                 updateProgress(
                     data.progress_percent || 0,
                     data.status_text || '',
@@ -110,7 +152,7 @@ function pollProgress() {
     progressInterval = setInterval(tick, 1000);
 }
 
-// Check payload connection on load
+// ── Payload connectivity check on load ───────────────────────────────────
 fetch(`${API_BASE}/api/status`)
     .then(res => res.json())
     .then(data => console.log('Payload status:', data))

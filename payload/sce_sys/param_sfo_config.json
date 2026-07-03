@@ -1,0 +1,19 @@
+{
+    "_comment": "Human-readable config for Quaza's param.sfo. Edit here, then run payload/tools/gen_param_sfo.py to regenerate the binary.",
+    "TITLE":            "Quaza PKG Tool",
+    "TITLE_ID":         "QUAZ00001",
+    "CONTENT_ID":       "EP0000-QUAZ00001_00-QUAZAPKGTOOL0001",
+    "VERSION":          "01.00",
+    "APP_VER":          "01.00",
+    "SYSTEM_VER":       851968,
+    "APP_TYPE":         1,
+    "CATEGORY":         "gd",
+    "PUBTOOLINFO":      "c_sdk_version:00360000,tool_version:00360000",
+    "_notes": [
+        "TITLE_ID must be exactly 9 chars: 4 letters + 5 digits.",
+        "CONTENT_ID format: XX0000-TTTTTNNNNN_00-XXXXXXXXXXXXXXXX (36 chars).",
+        "APP_TYPE 1 = Game/App.",
+        "SYSTEM_VER 851968 = 0xD0000 = FW 4.00 minimum.",
+        "icon0.png must be 512x512 PNG — place in payload/sce_sys/icon0.png."
+    ]
+}
