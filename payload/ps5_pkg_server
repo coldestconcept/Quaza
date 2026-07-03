@@ -9,9 +9,10 @@
 
 #define PORT 8080
 #define WEB_ROOT "/data/pkg_tool/www"
+#define SCRAPER_PATH "/data/pkg_tool/python/scraper.py"
 #define BUFFER_SIZE 4096
 
-// External symbols resolved dynamically by the PS5 toolchain
+// External symbol for kernel logging debug streams inside the PS5 homebrew SDK environment
 extern int sceKernelDebugOutText(int type, const char* text);
 
 void log_debug(const char* message) {
@@ -34,7 +35,7 @@ void send_http_response(int client_fd, const char* status, const char* content_t
 
 void handle_static_file(int client_fd, const char* path) {
     char full_path[512];
-    // Security: Prevent directory traversal exploits by joining strictly
+    // Block parent directory traversal exploits safely by locking to explicit targets
     snprintf(full_path, sizeof(full_path), "%s%s", WEB_ROOT, (strcmp(path, "/") == 0) ? "/index.html" : path);
 
     int file_fd = open(full_path, O_RDONLY);
@@ -44,18 +45,15 @@ void handle_static_file(int client_fd, const char* path) {
         return;
     }
 
-    // Determine basic content types
     const char* content_type = "text/plain";
     if (strstr(full_path, ".html")) content_type = "text/html";
     else if (strstr(full_path, ".js")) content_type = "application/javascript";
     else if (strstr(full_path, ".css")) content_type = "text/css";
     else if (strstr(full_path, ".json")) content_type = "application/json";
 
-    // Read and stream file content
     char file_buffer[BUFFER_SIZE];
     ssize_t bytes_read;
     
-    // First send success headers
     char header[256];
     int header_len = snprintf(header, sizeof(header), "HTTP/1.1 200 OK\r\nContent-Type: %s\r\nConnection: close\r\n\r\n", content_type);
     write(client_fd, header, header_len);
@@ -66,6 +64,32 @@ void handle_static_file(int client_fd, const char* path) {
     close(file_fd);
 }
 
+void extract_json_value(const char* json, const char* key, char* output, size_t max_len) {
+    // Basic flat JSON tokenizer fallback loop to split simple values without external dependencies
+    char pattern[64];
+    snprintf(pattern, sizeof(pattern), "\"%s\"\\s*:\\s*\"([^\"]+)\"", key);
+    
+    // Quick alternate parsing mechanism using structured string hunting
+    char* key_pos = strstr(json, key);
+    if (!key_pos) return;
+    
+    char* start = strchr(key_pos, ':');
+    if (!start) return;
+    
+    start = strchr(start, '"');
+    if (!start) return;
+    start++; // Advance past opening quote
+    
+    char* end = strchr(start, '"');
+    if (!end) return;
+    
+    size_t len = end - start;
+    if (len >= max_len) len = max_len - 1;
+    
+    strncpy(output, start, len);
+    output[len] = '\0';
+}
+
 void handle_client(int client_fd) {
     char buffer[BUFFER_SIZE];
     memset(buffer, 0, BUFFER_SIZE);
@@ -73,21 +97,41 @@ void handle_client(int client_fd) {
     ssize_t bytes_received = read(client_fd, buffer, BUFFER_SIZE - 1);
     if (bytes_received <= 0) return;
 
-    // Parse HTTP Method and Path
     char method[16], path[256], protocol[16];
     if (sscanf(buffer, "%15s %255s %15s", method, path, protocol) < 3) return;
-
-    log_debug("Incoming HTTP Request:");
-    log_debug(method);
-    log_debug(path);
 
     if (strcmp(method, "GET") == 0) {
         handle_static_file(client_fd, path);
     } 
     else if (strcmp(method, "POST") == 0 && strcmp(path, "/api/backport") == 0) {
-        // Native backport logic execution or trigger execution command here
-        const char* json_res = "{\"status\":\"processing\", \"msg\":\"Backport workflow initialized.\"}";
-        send_http_response(client_fd, "202 Accepted", "application/json", json_res, strlen(json_res));
+        // Track body marker starting immediately following standard double return headers
+        char* body = strstr(buffer, "\r\n\r\n");
+        if (body) {
+            body += 4;
+            
+            char target_ppsaid[16];
+            memset(target_ppsaid, 0, sizeof(target_ppsaid));
+            extract_json_value(body, "ppsaid", target_ppsaid, sizeof(target_ppsaid));
+            
+            if (strlen(target_ppsaid) > 0) {
+                log_debug("Extracted Target Title ID for backporting process:");
+                log_debug(target_ppsaid);
+                
+                // Assemble command line execution wrapper safely
+                char command[256];
+                snprintf(command, sizeof(command), "python3 %s %s &", SCRAPER_PATH, target_ppsaid);
+                
+                log_debug("Executing system command script assembly trigger line...");
+                system(command);
+                
+                char json_res[256];
+                snprintf(json_res, sizeof(json_res), "{\"status\":\"processing\",\"msg\":\"Backport workflow initialized for %s.\"}", target_ppsaid);
+                send_http_response(client_fd, "202 Accepted", "application/json", json_res, strlen(json_res));
+                return;
+            }
+        }
+        const char* bad_payload = "{\"status\":\"error\",\"msg\":\"Missing or invalid raw JSON body payload parameters.\"}";
+        send_http_response(client_fd, "400 Bad Request", "application/json", bad_payload, strlen(bad_payload));
     } 
     else {
         const char* bad_req = "<h1>400 Bad Request</h1>";
@@ -103,27 +147,23 @@ int main() {
 
     log_debug("Starting PS5 PKG HTTP Tool Server...");
 
-    // Create Socket
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         log_debug("Socket generation failed.");
         return -1;
     }
 
-    // Forcefully attaching socket to port 8080
     setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(PORT);
 
-    // Bind Address
     if (bind(server_fd, (struct sockaddr*)&address, sizeof(address)) < 0) {
         log_debug("Socket bind address mapping failed.");
         close(server_fd);
         return -1;
     }
 
-    // Listen Loop
     if (listen(server_fd, 10) < 0) {
         log_debug("Listen pipeline failure.");
         close(server_fd);
