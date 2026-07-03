@@ -3,202 +3,272 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quaza - PS5 PKG Tool</title>
+    <title>Quaza — PS5 PKG Tool</title>
     <style>
-        :root {
-            --bg-main: #121214;
-            --bg-card: #202024;
-            --bg-input: #19191c;
-            --primary: #00875f;
-            --primary-hover: #00b37e;
-            --text-main: #e1e1e6;
-            --text-muted: #8d8d99;
-            --border: #29292e;
-        }
-        body { 
-            font-family: system-ui, -apple-system, sans-serif; 
-            background: var(--bg-main); 
-            color: var(--text-main); 
-            padding: 2rem 1rem;
-            margin: 0;
-        }
-        .container {
-            max-width: 700px;
-            margin: 0 auto;
-        }
-        header {
-            text-align: center;
-            margin-bottom: 2rem;
-        }
-        header h1 {
-            color: var(--primary);
-            margin: 0 0 0.5rem 0;
-            font-size: 2.5rem;
-        }
-        header p {
-            color: var(--text-muted);
-            margin: 0;
-        }
-        .card { 
-            background: var(--bg-card); 
-            border-radius: 8px; 
-            padding: 2rem; 
-            box-shadow: 0 10px 25px rgba(0,0,0,0.4);
-            border: 1px solid var(--border);
-            margin-bottom: 1.5rem;
-        }
-        h2 {
-            margin-top: 0;
-            font-size: 1.3rem;
-            border-bottom: 1px solid var(--border);
-            padding-bottom: 0.5rem;
-            color: var(--text-main);
-        }
-        .feature-badge-group {
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(160deg, #5ecfee 0%, #85ddf5 40%, #aeeafc 70%, #c8f2ff 100%);
             display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            margin-bottom: 1.5rem;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem 1rem;
+            position: relative;
+            overflow-x: hidden;
         }
-        .badge {
-            background: var(--border);
-            color: var(--text-main);
-            padding: 4px 10px;
-            border-radius: 4px;
-            font-size: 0.8rem;
+
+        /* ── Glass card ── */
+        .glass {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            max-width: 520px;
+            background: rgba(255, 255, 255, 0.28);
+            backdrop-filter: blur(24px) saturate(160%);
+            -webkit-backdrop-filter: blur(24px) saturate(160%);
+            border-radius: 28px;
+            border: 1.5px solid rgba(255, 255, 255, 0.72);
+            box-shadow:
+                0 8px 40px rgba(80, 180, 220, 0.22),
+                0 1.5px 0px rgba(255,255,255,0.9) inset;
+            padding: 2.4rem 2.2rem 2rem;
+        }
+
+        /* ── Header ── */
+        .logo {
+            text-align: center;
+            margin-bottom: 1.8rem;
+        }
+        .logo h1 {
+            font-size: 2.8rem;
+            font-weight: 800;
+            letter-spacing: -1px;
+            color: #1a3a52;
+            text-shadow: 0 2px 12px rgba(255,255,255,0.6);
+        }
+        .logo p {
+            color: #2e6080;
+            font-size: 0.92rem;
+            margin-top: 4px;
             font-weight: 500;
         }
+
+        /* ── Badges ── */
+        .badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 1.6rem;
+        }
+        .badge {
+            padding: 5px 13px;
+            border-radius: 99px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: rgba(255,255,255,0.45);
+            border: 1px solid rgba(255,255,255,0.75);
+            color: #1a4a6e;
+            backdrop-filter: blur(8px);
+            letter-spacing: 0.2px;
+        }
         .badge.active {
-            border: 1px solid var(--primary);
-            color: var(--primary-hover);
+            background: rgba(94, 207, 238, 0.28);
+            border-color: rgba(94, 207, 238, 0.65);
+            color: #0d3550;
         }
-        .form-group {
-            margin-bottom: 1.25rem;
+
+        /* ── Section title ── */
+        .section-title {
+            font-size: 0.8rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #2e6080;
+            margin-bottom: 1rem;
         }
-        label { 
-            display: block; 
-            margin-bottom: 0.5rem; 
-            color: var(--text-muted);
-            font-size: 0.9rem;
+
+        /* ── Form ── */
+        .field {
+            margin-bottom: 1.1rem;
         }
-        input[type="text"] { 
-            width: 100%; 
-            padding: 12px; 
-            background: var(--bg-input); 
-            color: #fff; 
-            border: 1px solid var(--border); 
-            border-radius: 6px;
-            box-sizing: border-box; 
+        label {
+            display: block;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: #1a3a52;
+            margin-bottom: 6px;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 11px 14px;
+            background: rgba(255, 255, 255, 0.55);
+            border: 1.5px solid rgba(255,255,255,0.8);
+            border-radius: 12px;
+            color: #1a3a52;
             font-family: monospace;
-            font-size: 0.95rem;
-        }
-        input[type="text"]:focus {
+            font-size: 0.9rem;
+            backdrop-filter: blur(6px);
             outline: none;
-            border-color: var(--primary);
+            transition: border-color 0.2s, box-shadow 0.2s;
         }
-        .checkbox-group {
+        input[type="text"]::placeholder { color: #7ab5cc; }
+        input[type="text"]:focus {
+            border-color: rgba(94, 207, 238, 0.9);
+            box-shadow: 0 0 0 3px rgba(94, 207, 238, 0.2);
+        }
+        .hint {
+            font-size: 0.75rem;
+            color: #4a8aaa;
+            margin-top: 4px;
+        }
+
+        /* ── Checkbox ── */
+        .check-row {
             display: flex;
             align-items: center;
             gap: 10px;
-            margin-top: 10px;
+            margin-bottom: 1.4rem;
         }
-        .checkbox-group input {
+        .check-row input[type="checkbox"] {
+            width: 17px;
+            height: 17px;
+            accent-color: #2eaacc;
             cursor: pointer;
-            accent-color: var(--primary);
         }
-        button { 
-            width: 100%; 
-            padding: 14px; 
-            background: var(--primary); 
-            color: #fff; 
-            font-weight: bold; 
-            font-size: 1rem;
+        .check-row label {
+            margin: 0;
+            font-size: 0.84rem;
+            font-weight: 500;
+            color: #1e4d6b;
+            cursor: pointer;
+        }
+
+        /* ── Button ── */
+        .btn {
+            width: 100%;
+            padding: 14px;
             border: none;
-            border-radius: 6px;
-            cursor: pointer; 
-            transition: background 0.2s;
+            border-radius: 14px;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            letter-spacing: 0.02em;
+            background: linear-gradient(135deg, #2dc8ef 0%, #1a9ec0 100%);
+            color: #fff;
+            box-shadow: 0 4px 18px rgba(45, 200, 239, 0.45);
+            transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
         }
-        button:hover { 
-            background: var(--primary-hover); 
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(45, 200, 239, 0.5);
         }
-        #status-box { 
-            margin-top: 1.5rem; 
-            padding: 1rem; 
-            background: var(--bg-input); 
-            border-radius: 6px;
-            border-left: 4px solid var(--primary); 
-            display: none; 
+        .btn:active:not(:disabled) { transform: translateY(0); }
+        .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+        /* ── Status box ── */
+        #status-box {
+            display: none;
+            margin-top: 1.2rem;
+            padding: 1rem 1.1rem;
+            background: rgba(255,255,255,0.45);
+            border-radius: 14px;
+            border-left: 4px solid #2dc8ef;
+            backdrop-filter: blur(8px);
         }
-        .status-header {
-            font-weight: bold;
+        .status-label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #2e6080;
             margin-bottom: 5px;
         }
-        .progress-bar-container {
-            background: var(--border);
-            border-radius: 4px;
-            height: 8px;
-            width: 100%;
-            margin-top: 8px;
+        #statusTxt {
+            font-size: 0.9rem;
+            color: #1a3a52;
+            line-height: 1.5;
+        }
+        .prog-track {
+            background: rgba(200,240,255,0.6);
+            border-radius: 99px;
+            height: 7px;
+            margin-top: 10px;
             overflow: hidden;
         }
-        .progress-bar {
-            background: var(--primary);
+        #progressBar {
             height: 100%;
             width: 0%;
-            transition: width 0.3s ease;
+            background: linear-gradient(90deg, #2dc8ef, #1a9ec0);
+            border-radius: 99px;
+            transition: width 0.4s ease;
         }
+
+        /* ── Footer link to pkg.html ── */
+        .alt-link {
+            text-align: center;
+            margin-top: 1.4rem;
+            font-size: 0.82rem;
+            color: #2e6080;
+        }
+        .alt-link a {
+            color: #1a7fa0;
+            font-weight: 600;
+            text-decoration: none;
+        }
+        .alt-link a:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <header>
+<div class="glass">
+    <div class="logo">
         <h1>Quaza</h1>
         <p>Browser-Based PS5 Homebrew PKG Tool</p>
-    </header>
+    </div>
 
-    <div class="card">
-        <h2>System Capabilities</h2>
-        <div class="feature-badge-group">
-            <span class="badge active">● LibProsperoPKG Engine</span>
-            <span class="badge active">● ShadowMount Plus Core</span>
-            <span class="badge active">● Live WebKit API</span>
-            <span class="badge">● Auto-Backport Enabled</span>
+    <div class="badges">
+        <span class="badge active">● LibProsperoPKG Engine</span>
+        <span class="badge active">● ShadowMount Plus</span>
+        <span class="badge active">● Live WebKit API</span>
+        <span class="badge">● Auto-Backport</span>
+    </div>
+
+    <p class="section-title">PKG Converter</p>
+
+    <div class="field">
+        <label for="dumpPath">Decrypted Title Directory Path</label>
+        <input type="text" id="dumpPath" placeholder="/mnt/usb0/CUSA00000-app">
+    </div>
+
+    <div class="field">
+        <label for="contentId">Content ID</label>
+        <input type="text" id="contentId" placeholder="CUSA00000-XXXX00000_00-XXXXXXXXXX000000">
+        <div class="hint">Found in the game's param.sfo file.</div>
+    </div>
+
+    <div class="check-row">
+        <input type="checkbox" id="enableBackport" checked>
+        <label for="enableBackport">Auto-query prosperopatches.com for delta down-ports</label>
+    </div>
+
+    <button class="btn" id="convertBtn">Compile &amp; Deploy Native PKG</button>
+
+    <div id="status-box">
+        <div class="status-label">Runtime Status</div>
+        <span id="statusTxt"></span>
+        <div class="prog-track">
+            <div id="progressBar"></div>
         </div>
+    </div>
 
-        <h2>PKG Converter Panel</h2>
-        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">
-            Compile retail-installable packages directly inside your jailbroken system sandbox. No external computer pipeline required.
-        </p>
-        
-        <div class="form-group">
-            <label for="dumpPath">Decrypted Title Directory Mount Path:</label>
-            <input type="text" id="dumpPath" placeholder="/mnt/usb0/CUSA00000-app" required>
-        </div>
-
-        <div class="form-group">
-            <label for="contentId">Content ID:</label>
-            <input type="text" id="contentId" placeholder="CUSA00000-XXXX00000_00-XXXXXXXXXX000000" style="font-family: monospace; font-size: 0.9rem;">
-            <div style="color: var(--text-muted); font-size: 0.8rem; margin-top: 4px;">Found in the game's param.sfo file.</div>
-        </div>
-
-        <div class="form-group checkbox-group">
-            <input type="checkbox" id="enableBackport" checked>
-            <label for="enableBackport">Query prosperopatches.com automatically for delta down-ports</label>
-        </div>
-
-        <button id="convertBtn">Compile & Deploy Native PKG</button>
-
-        <div id="status-box">
-            <div class="status-header">Runtime Status:</div>
-            <span id="statusTxt">Awaiting payload parameters...</span>
-            <div class="progress-bar-container">
-                <div id="progressBar" class="progress-bar"></div>
-            </div>
-        </div>
+    <div class="alt-link">
+        Also try the <a href="pkg.html">Advanced PKG Converter →</a>
     </div>
 </div>
 
+<script src="js/snow.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
