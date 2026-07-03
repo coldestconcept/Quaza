@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PS5 PKG Tool Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>PS5 PKG Tool</h1>
+            <p class="subtitle">Browser-based game dump & backport assistant</p>
+        </header>
+
+        <main class="dashboard-grid">
+            <!-- Scraper Control Card -->
+            <section class="card">
+                <h2>Auto-Backport Scraper</h2>
+                <div class="form-group">
+                    <label for="ppsaid">PPSA Title ID:</label>
+                    <input type="text" id="ppsaid" placeholder="e.g., PPSA01234" maxlength="9">
+                </div>
+                <button id="btn-backport" class="btn btn-primary">Fetch & Backport</button>
+            </section>
+
+            <!-- ShadowMount Configuration Status Card -->
+            <section class="card">
+                <h2>System Status</h2>
+                <div class="status-item">
+                    <span>ShadowMount Plus:</span>
+                    <span class="badge badge-success">Integrated</span>
+                </div>
+                <div class="status-item">
+                    <span>Server Storage:</span>
+                    <span id="storage-status">/data/pkg_tool/</span>
+                </div>
+            </section>
+
+            <!-- Console Log Output Card -->
+            <section class="card full-width">
+                <h2>Execution Output Log</h2>
+                <div id="log-terminal" class="terminal">
+                    <span class="log-line system">[System] Initialize web interface... Ready.</span>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="main.js"></script>
+</body>
+</html>
