@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 // HTTP server configuration
-#define PKG_SERVER_PORT 8080
+#define PKG_SERVER_PORT 4242
 #define PKG_SERVER_MAX_CONNECTIONS 10
 #define PKG_SERVER_BUFFER_SIZE 65536
 

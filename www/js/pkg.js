@@ -1,6 +1,6 @@
 // Derive the PS5 payload host from the page URL so this works from any
 // device (PC, phone, etc.) — never hardcode localhost.
-const API_BASE = `http://${window.location.hostname || '127.0.0.1'}:8080`;
+const API_BASE = `http://${window.location.hostname || '127.0.0.1'}:4242`;
 
 let progressInterval = null;
 

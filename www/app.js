@@ -1,7 +1,7 @@
 // Derive the PS5 payload host dynamically so this works from any device
 // (PC, phone, another PS5) pointed at the same IP — never hardcode localhost.
 const API_HOST = window.location.hostname || '127.0.0.1';
-const API_BASE = `http://${API_HOST}:8080`;
+const API_BASE = `http://${API_HOST}:4242`;
 
 // Check payload connection on page load
 fetch(`${API_BASE}/api/status`)
