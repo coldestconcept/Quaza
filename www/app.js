@@ -1,20 +1,20 @@
 // Derive the PS5 payload host dynamically so this works from any device
 // (PC, phone, another PS5) pointed at the same IP — never hardcode localhost.
-// When served over HTTPS (e.g. a web preview), the browser blocks plain-HTTP
-// fetches as mixed content; detect that case up front so the UI stays usable
-// instead of every request silently failing.
+// When the payload is unreachable (HTTPS preview, or no ELF loaded), demo.js
+// activates and these calls fall back to simulated data so the UI is fully
+// interactive on any PC.
 const API_HOST = window.location.hostname || '127.0.0.1';
 const API_BASE = `http://${API_HOST}:4242`;
-const API_REACHABLE = window.location.protocol === 'http:' || window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
+const demo = window.QuazaDemo;
 
 // Check payload connection on page load
-if (API_REACHABLE) {
+if (demo && demo.isDemoMode()) {
+    demo.status().then(data => console.log('Demo payload connected:', data));
+} else {
     fetch(`${API_BASE}/api/status`)
         .then(res => res.json())
         .then(data => console.log('Payload connected:', data))
         .catch(() => console.warn('Payload not reachable — ensure the ELF is loaded on your PS5.'));
-} else {
-    console.warn('Preview context: payload API is not reachable from this origin. UI is view-only.');
 }
 
 // ── Auto-detect Content ID from dump path ────────────────────────────────
@@ -31,28 +31,39 @@ function autoDetectContentId(path) {
         autoDetectHint.style.color = '#4a8aaa';
     }
 
-    fetch(`${API_BASE}/api/sfo/parse?path=${encodeURIComponent(path)}`)
-        .then(res => res.json())
-        .then(data => {
-            if (data.content_id) {
-                contentIdInput.value = data.content_id;
-                if (autoDetectHint) {
-                    autoDetectHint.textContent = '✓ Content ID detected from param.sfo';
-                    autoDetectHint.style.color = '#1a7a40';
-                }
-            } else {
-                if (autoDetectHint) {
-                    autoDetectHint.textContent = 'Could not detect — enter Content ID manually.';
-                    autoDetectHint.style.color = '#8a5500';
-                }
+    const detect = (data) => {
+        if (data.content_id) {
+            contentIdInput.value = data.content_id;
+            if (autoDetectHint) {
+                autoDetectHint.textContent = '✓ Content ID detected from param.sfo';
+                autoDetectHint.style.color = '#1a7a40';
             }
-        })
-        .catch(() => {
+        } else {
+            if (autoDetectHint) {
+                autoDetectHint.textContent = 'Could not detect — enter Content ID manually.';
+                autoDetectHint.style.color = '#8a5500';
+            }
+        }
+    };
+
+    if (demo && demo.isDemoMode()) {
+        demo.sfoParse(path).then(detect).catch(() => {
             if (autoDetectHint) {
                 autoDetectHint.textContent = 'Found in the game\'s param.sfo file.';
                 autoDetectHint.style.color = '#4a8aaa';
             }
         });
+    } else {
+        fetch(`${API_BASE}/api/sfo/parse?path=${encodeURIComponent(path)}`)
+            .then(res => res.json())
+            .then(detect)
+            .catch(() => {
+                if (autoDetectHint) {
+                    autoDetectHint.textContent = 'Found in the game\'s param.sfo file.';
+                    autoDetectHint.style.color = '#4a8aaa';
+                }
+            });
+    }
 }
 
 if (dumpPathInput) {
@@ -97,23 +108,32 @@ document.getElementById('convertBtn').addEventListener('click', () => {
         ...(enableBackport && { backport: 'true' })
     });
 
-    fetch(`${API_BASE}/api/pkg/create?${params}`)
-        .then(res => {
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            return res.json();
-        })
-        .then(data => {
-            if (data.error) throw new Error(data.error);
-            statusTxt.textContent = 'PKG creation started — monitoring progress...';
-            progressBar.style.width = '5%';
-            pollProgress();
-        })
-        .catch(err => {
-            statusTxt.textContent = 'Failed to reach Quaza payload. Make sure the ELF server is active on your PS5.';
-            progressBar.style.backgroundColor = '#ff4444';
-            document.getElementById('convertBtn').disabled = false;
-            console.error('Conversion start error:', err);
-        });
+    const onStart = () => {
+        statusTxt.textContent = 'PKG creation started — monitoring progress...';
+        progressBar.style.width = '5%';
+        pollProgress();
+    };
+    const onFail = (err) => {
+        statusTxt.textContent = 'Failed to reach Quaza payload. Make sure the ELF server is active on your PS5.';
+        progressBar.style.backgroundColor = '#ff4444';
+        document.getElementById('convertBtn').disabled = false;
+        console.error('Conversion start error:', err);
+    };
+
+    if (demo && demo.isDemoMode()) {
+        demo.pkgCreate(params).then(onStart).catch(onFail);
+    } else {
+        fetch(`${API_BASE}/api/pkg/create?${params}`)
+            .then(res => {
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                return res.json();
+            })
+            .then(data => {
+                if (data.error) throw new Error(data.error);
+                onStart();
+            })
+            .catch(onFail);
+    }
 });
 
 function pollProgress() {
@@ -122,56 +142,65 @@ function pollProgress() {
     let failureCount  = 0;
 
     const monitor = setInterval(() => {
-        fetch(`${API_BASE}/api/pkg/progress`)
-            .then(res => {
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                return res.json();
-            })
-            .then(data => {
-                failureCount = 0;
-                progressBar.style.backgroundColor = 'var(--primary)';
+        const handleData = (data) => {
+            failureCount = 0;
+            progressBar.style.backgroundColor = 'var(--primary)';
 
-                const pct = data.progress_percent || 0;
-                progressBar.style.width = `${pct}%`;
+            const pct = data.progress_percent || 0;
+            progressBar.style.width = `${pct}%`;
 
-                if (data.status === 4) { // PKG_STATUS_COMPLETE
-                    clearInterval(monitor);
-                    document.getElementById('convertBtn').disabled = false;
-                    progressBar.style.width = '100%';
-                    statusTxt.textContent = 'PKG compiled successfully!';
+            if (data.status === 4) { // PKG_STATUS_COMPLETE
+                clearInterval(monitor);
+                document.getElementById('convertBtn').disabled = false;
+                progressBar.style.width = '100%';
+                statusTxt.textContent = 'PKG compiled successfully!';
 
-                    if (data.output_path) {
-                        const dlUrl = `${API_BASE}/api/pkg/download?path=${encodeURIComponent(data.output_path)}`;
-                        const link  = document.createElement('a');
-                        link.href      = dlUrl;
-                        link.download  = '';
-                        link.textContent = '⬇ Download PKG';
-                        link.style.cssText = 'display:inline-block;margin-top:10px;padding:8px 16px;background:var(--primary);color:#fff;border-radius:6px;text-decoration:none;font-weight:bold;';
-                        statusTxt.appendChild(document.createElement('br'));
-                        statusTxt.appendChild(link);
-                    }
-                } else if (data.status === 5) { // PKG_STATUS_ERROR
-                    clearInterval(monitor);
-                    document.getElementById('convertBtn').disabled = false;
-                    statusTxt.textContent = `Build failed: ${data.error || 'Unknown error'}`;
-                    progressBar.style.backgroundColor = '#ff4444';
-                } else {
-                    const label = data.status_text || statusLabel(data.status);
-                    const file  = data.current_file ? ` — ${data.current_file}` : '';
-                    statusTxt.textContent = `${label}${file} (${pct}%)`;
+                if (data.output_path) {
+                    const dlUrl = (demo && demo.isDemoMode())
+                        ? demo.downloadUrl()
+                        : `${API_BASE}/api/pkg/download?path=${encodeURIComponent(data.output_path)}`;
+                    const link  = document.createElement('a');
+                    link.href      = dlUrl;
+                    link.download  = data.output_path.split('/').pop() || 'output.pkg';
+                    link.textContent = '⬇ Download PKG';
+                    link.style.cssText = 'display:inline-block;margin-top:10px;padding:8px 16px;background:var(--primary);color:#fff;border-radius:6px;text-decoration:none;font-weight:bold;';
+                    statusTxt.appendChild(document.createElement('br'));
+                    statusTxt.appendChild(link);
                 }
-            })
-            .catch(err => {
-                failureCount++;
-                statusTxt.textContent = `Reconnecting to payload... (attempt ${failureCount}/5)`;
-                if (failureCount >= 5) {
-                    clearInterval(monitor);
-                    document.getElementById('convertBtn').disabled = false;
-                    statusTxt.textContent = 'Connection lost. Check the payload is still running on your PS5.';
-                    progressBar.style.backgroundColor = '#ff4444';
-                    console.error('Polling failed:', err);
-                }
-            });
+            } else if (data.status === 5) { // PKG_STATUS_ERROR
+                clearInterval(monitor);
+                document.getElementById('convertBtn').disabled = false;
+                statusTxt.textContent = `Build failed: ${data.error || 'Unknown error'}`;
+                progressBar.style.backgroundColor = '#ff4444';
+            } else {
+                const label = data.status_text || statusLabel(data.status);
+                const file  = data.current_file ? ` — ${data.current_file}` : '';
+                statusTxt.textContent = `${label}${file} (${pct}%)`;
+            }
+        };
+        const handleErr = (err) => {
+            failureCount++;
+            statusTxt.textContent = `Reconnecting to payload... (attempt ${failureCount}/5)`;
+            if (failureCount >= 5) {
+                clearInterval(monitor);
+                document.getElementById('convertBtn').disabled = false;
+                statusTxt.textContent = 'Connection lost. Check the payload is still running on your PS5.';
+                progressBar.style.backgroundColor = '#ff4444';
+                console.error('Polling failed:', err);
+            }
+        };
+
+        if (demo && demo.isDemoMode()) {
+            demo.pkgProgress().then(handleData).catch(handleErr);
+        } else {
+            fetch(`${API_BASE}/api/pkg/progress`)
+                .then(res => {
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    return res.json();
+                })
+                .then(handleData)
+                .catch(handleErr);
+        }
     }, 1000);
 }
 
