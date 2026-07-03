@@ -173,12 +173,18 @@
         
         <div class="form-group">
             <label for="dumpPath">Decrypted Title Directory Mount Path:</label>
-            <input type="text" id="dumpPath" placeholder="/mnt/sandbox/pfsmnt/CUSAXXXXX-app" required>
+            <input type="text" id="dumpPath" placeholder="/mnt/usb0/CUSA00000-app" required>
+        </div>
+
+        <div class="form-group">
+            <label for="contentId">Content ID:</label>
+            <input type="text" id="contentId" placeholder="CUSA00000-XXXX00000_00-XXXXXXXXXX000000" style="font-family: monospace; font-size: 0.9rem;">
+            <div style="color: var(--text-muted); font-size: 0.8rem; margin-top: 4px;">Found in the game's param.sfo file.</div>
         </div>
 
         <div class="form-group checkbox-group">
             <input type="checkbox" id="enableBackport" checked>
-            <label Skinner for="enableBackport">Query prosperopatches.com automatically for delta down-ports</label>
+            <label for="enableBackport">Query prosperopatches.com automatically for delta down-ports</label>
         </div>
 
         <button id="convertBtn">Compile & Deploy Native PKG</button>
