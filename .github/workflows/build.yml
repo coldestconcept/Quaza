@@ -42,11 +42,20 @@ jobs:
 
     - name: Configure and Execute Toolchain Wrapper Cross-Compilation
       run: |
+        # Auto-detect toolchain blueprints recursively
         REAL_TOOLCHAIN=$(find $GITHUB_WORKSPACE/target-sdk -name "prospero.cmake" -type f | head -n 1)
         SDK_BASE_DIR=$(dirname $(dirname "$REAL_TOOLCHAIN"))
-        REAL_TARGET_DIR=$(find $GITHUB_WORKSPACE/target-sdk -name "target" -type d | head -n 1)
-        if [ -z "$REAL_TARGET_DIR" ]; then
-            REAL_TARGET_DIR="$GITHUB_WORKSPACE/target-sdk"
+        
+        # Fixed: Find ALL nested include directories inside the raw checked-out SDK source tree
+        ALL_INCLUDES=""
+        for inc_dir in $(find $GITHUB_WORKSPACE/target-sdk -name "include" -type d -o -name "include_common" -type d); do
+            ALL_INCLUDES="$ALL_INCLUDES -I$inc_dir"
+        done
+        
+        # Fallback to catch raw standard headers folder
+        STDIO_PATH=$(find $GITHUB_WORKSPACE/target-sdk -name "stdio.h" -type f | head -n 1)
+        if [ ! -z "$STDIO_PATH" ]; then
+            ALL_INCLUDES="$ALL_INCLUDES -I$(dirname "$STDIO_PATH")"
         fi
         
         export PS5_PAYLOAD_SDK="$SDK_BASE_DIR"
@@ -57,8 +66,8 @@ jobs:
               -DCMAKE_C_COMPILER=/usr/bin/clang-15 \
               -DCMAKE_TOOLCHAIN_FILE="$REAL_TOOLCHAIN" \
               -DCMAKE_C_COMPILER_WORKS=1 \
-              -DCMAKE_C_FLAGS="-I${REAL_TARGET_DIR}/include -I${REAL_TARGET_DIR}/include_common" \
-              -DSDK_PATH="$REAL_TARGET_DIR" ..
+              -DCMAKE_C_FLAGS="$ALL_INCLUDES" \
+              -DSDK_PATH="$SDK_BASE_DIR" ..
         cmake --build .
 
     - name: Upload Completed Production Packages
