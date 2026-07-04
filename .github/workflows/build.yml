@@ -17,19 +17,18 @@ jobs:
         path: main-repo
         submodules: recursive
 
-    - name: Set up Consolidated PS5 Payload Toolchain SDK
+    - name: Checkout SDK Source Framework Natively via API
+      uses: actions/checkout@v4
+      with:
+        repository: ps5-payload-dev/sdk
+        path: target-sdk
+        submodules: recursive
+
+    - name: Deploy Core Cross-Compiler Tools
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake make python3 clang-15 lld-15 curl unzip
-        
-        # Download the official, verified release archive containing all target stubs and headers
-        mkdir -p $GITHUB_WORKSPACE/target-sdk
-        curl -L "https://github.com" -o sdk.zip
-        unzip -o sdk.zip -d $GITHUB_WORKSPACE/target-sdk
-        rm sdk.zip
-        
-        # Map absolute paths matching the compiled layout structure
-        echo "PS5_PAYLOAD_SDK=$GITHUB_WORKSPACE/target-sdk/ps5-payload-sdk" >> $GITHUB_ENV
+        sudo apt-get install -y cmake make python3 clang-15 lld-15
+        echo "PS5_PAYLOAD_SDK=$GITHUB_WORKSPACE/target-sdk" >> $GITHUB_ENV
 
     - name: Safeguard Asset Embedding Headers
       run: |
@@ -43,20 +42,23 @@ jobs:
 
     - name: Configure and Execute Toolchain Wrapper Cross-Compilation
       run: |
+        REAL_TOOLCHAIN=$(find $GITHUB_WORKSPACE/target-sdk -name "prospero.cmake" -type f | head -n 1)
+        SDK_BASE_DIR=$(dirname $(dirname "$REAL_TOOLCHAIN"))
+        REAL_TARGET_DIR=$(find $GITHUB_WORKSPACE/target-sdk -name "target" -type d | head -n 1)
+        if [ -z "$REAL_TARGET_DIR" ]; then
+            REAL_TARGET_DIR="$GITHUB_WORKSPACE/target-sdk"
+        fi
+        
+        export PS5_PAYLOAD_SDK="$SDK_BASE_DIR"
+        
         cd main-repo/payload
         mkdir -p build && cd build
-        
-        # Set absolute search boundaries mapping target and include common folders
-        REAL_TOOLCHAIN="${{ env.PS5_PAYLOAD_SDK }}/toolchain/prospero.cmake"
-        SDK_TARGET_DIR="${{ env.PS5_PAYLOAD_SDK }}/target"
-        
         cmake -DCMAKE_MAKE_PROGRAM=/usr/bin/make \
               -DCMAKE_C_COMPILER=/usr/bin/clang-15 \
               -DCMAKE_TOOLCHAIN_FILE="$REAL_TOOLCHAIN" \
               -DCMAKE_C_COMPILER_WORKS=1 \
-              -DCMAKE_C_FLAGS="-I${SDK_TARGET_DIR}/include -I${SDK_TARGET_DIR}/include_common" \
-              -DCMAKE_EXE_LINKER_FLAGS="-L${SDK_TARGET_DIR}/lib -L${SDK_TARGET_DIR}/lib/kstuff_stub" \
-              -DSDK_PATH="$SDK_TARGET_DIR" ..
+              -DCMAKE_C_FLAGS="-I${REAL_TARGET_DIR}/include -I${REAL_TARGET_DIR}/include_common" \
+              -DSDK_PATH="$REAL_TARGET_DIR" ..
         cmake --build .
 
     - name: Upload Completed Production Packages
