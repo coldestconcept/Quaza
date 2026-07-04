@@ -20,6 +20,23 @@ fi
 echo "[info] tile_pkg_embed.h: $(wc -c < "$PAYLOAD/tile_pkg_embed.h") bytes"
 
 # =============================================================================
+# Restore SDK stubs that were overwritten by a previous bad build run.
+# Earlier runs rebuilt libSceLibcInternal.so etc. with minimal stubs,
+# removing symbols like printf/memset/calloc that libc.a depends on.
+# git checkout restores them to the SDK originals; harmless if already good.
+# =============================================================================
+echo "==> [0a/3] Restoring SDK stubs via git..."
+if git -C "$SDK" checkout -- sce_stubs/ 2>/dev/null; then
+  echo "  restored from SDK git"
+else
+  echo "  SDK is not a git repo — downloading stubs from GitHub..."
+  SDK_RAW="https://raw.githubusercontent.com/ps5-payload-dev/sdk/main/sce_stubs"
+  for lib in libSceLibcInternal.so libkernel.so libSceUserService.so libSceSysmodule.so; do
+    curl -fsSL "$SDK_RAW/$lib" -o "$SDK_STUBS/$lib" && echo "  fetched $lib" || echo "  warn: could not fetch $lib"
+  done
+fi
+
+# =============================================================================
 # [0/3] Fix the two hand-built stubs that have wrong SONAME
 #
 # The SDK already provides correct stubs for:
