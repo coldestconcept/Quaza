@@ -10,53 +10,31 @@ SDK_LIBC="$SDK/libc"
 BUILD="$PAYLOAD/build_direct"
 CLANG="clang"
 LDLLD="ld.lld"
+TMP="${TMPDIR:-$BUILD}"
 
 mkdir -p "$BUILD"
 
 if [ ! -f "$PAYLOAD/tile_pkg_embed.h" ]; then
-  echo "[error] tile_pkg_embed.h not found" >&2
-  exit 1
+  echo "[error] tile_pkg_embed.h not found" >&2; exit 1
 fi
 echo "[info] tile_pkg_embed.h: $(wc -c < "$PAYLOAD/tile_pkg_embed.h") bytes"
 
 # =============================================================================
-# Restore SDK stubs that were overwritten by a previous bad build run.
-# Earlier runs rebuilt libSceLibcInternal.so etc. with minimal stubs,
-# removing symbols like printf/memset/calloc that libc.a depends on.
-# git checkout restores them to the SDK originals; harmless if already good.
-# =============================================================================
-echo "==> [0a/3] Restoring SDK stubs via git..."
-if git -C "$SDK" checkout -- sce_stubs/ 2>/dev/null; then
-  echo "  restored from SDK git"
-else
-  echo "  SDK is not a git repo — downloading stubs from GitHub..."
-  SDK_RAW="https://raw.githubusercontent.com/ps5-payload-dev/sdk/main/sce_stubs"
-  for lib in libSceLibcInternal.so libkernel.so libSceUserService.so libSceSysmodule.so; do
-    curl -fsSL "$SDK_RAW/$lib" -o "$SDK_STUBS/$lib" && echo "  fetched $lib" || echo "  warn: could not fetch $lib"
-  done
-fi
-
-# =============================================================================
-# [0/3] Fix the two hand-built stubs that have wrong SONAME
+# fix_stub <soname.sprx> <out_libname.so> [sym ...]
 #
-# The SDK already provides correct stubs for:
-#   libkernel.so        -> SONAME: libkernel.sprx
-#   libSceLibcInternal  -> SONAME: libSceLibcInternal.sprx
-#   libSceUserService   -> SONAME: libSceUserService.sprx
-#   libSceSysmodule     -> SONAME: libSceSysmodule.sprx
+# Rebuilds a stub shared library with the correct SONAME and the listed
+# exported symbols.  Two-step (clang -c then ld.lld -shared) avoids Termux's
+# broken clang-as-linker invocation.
 #
-# These two were hand-built without -Wl,-soname so their SONAME was wrong:
-#   libSceSystemService.so  had SONAME: libSceSystemService.so  (WRONG)
-#   libSceAppInstUtil.so    had SONAME: libSceAppInstUtil.so    (WRONG)
-#
-# Rebuild only those two with the correct .sprx SONAME.
-# Two-step compile: clang -c -> ld.lld -shared, avoids Termux linker PATH issue.
+# Why we rebuild ALL six stubs here instead of relying on SDK originals:
+#   The ps5-payload-dev/sdk git main now ships empty stubs (no exported
+#   symbols).  The linker needs each symbol defined in *some* stub at link
+#   time; at runtime the real .sprx on PS5 provides the implementation.
+#   Rebuilding them ourselves is the only way to get a clean link.
 # =============================================================================
 fix_stub() {
   soname="$1"; out="$SDK_STUBS/$2"; shift 2
-  tmp="${TMPDIR:-$BUILD}"
-  src="$tmp/_fix_stub_$$.c"
-  obj="$tmp/_fix_stub_$$.o"
+  src="$TMP/_stub_$$.c"; obj="$TMP/_stub_$$.o"
   printf '' > "$src"
   for s; do printf 'void %s(void){}\n' "$s" >> "$src"; done
   $CLANG --target=x86_64-sie-ps5 --sysroot="$SDK" \
@@ -64,28 +42,81 @@ fix_stub() {
   $LDLLD -m elf_x86_64 -shared -nostdlib \
     "--soname=$soname" -o "$out" "$obj"
   rm -f "$src" "$obj"
-  echo "  fixed $soname"
+  echo "  stub $soname"
 }
 
-echo "==> [0/3] Fixing stub SONAMEs..."
+echo "==> [0/3] Rebuilding stubs..."
+
+# libkernel.sprx  — POSIX I/O, sockets, pthreads, sceKernel*
+fix_stub libkernel.sprx libkernel.so \
+  open close read write lseek dup dup2 \
+  stat fstat lstat mkdir rmdir unlink rename chmod fchmod access \
+  getpid geteuid getuid gettimeofday clock_gettime \
+  getifaddrs freeifaddrs \
+  socket connect bind listen accept send recv sendto recvfrom \
+  setsockopt getsockopt getsockname getpeername \
+  pthread_create pthread_join pthread_detach pthread_exit \
+  pthread_mutex_init pthread_mutex_lock pthread_mutex_unlock pthread_mutex_destroy \
+  pthread_cond_init pthread_cond_wait pthread_cond_signal \
+  pthread_cond_broadcast pthread_cond_destroy \
+  pthread_self pthread_attr_init pthread_attr_destroy pthread_attr_setstacksize \
+  usleep sleep \
+  sceKernelSendNotificationRequest sceKernelGetAppInfo sceKernelUsleep
+
+# libSceLibcInternal.sprx  — libc (stdio, string, memory, ctype, stdlib)
+fix_stub libSceLibcInternal.sprx libSceLibcInternal.so \
+  printf fprintf snprintf sprintf vfprintf vprintf vsnprintf \
+  puts fputs fputc fgetc fgets fflush \
+  fopen fclose fread fwrite fseek fseeko ftell ftello \
+  feof ferror fileno rewind fscanf sscanf \
+  strlen strncpy strcpy strcat strncat \
+  strcmp strncmp strstr strchr strrchr strdup strndup \
+  memset memcpy memmove memchr memcmp bzero \
+  malloc calloc realloc free \
+  abort exit _exit \
+  strtol strtoll strtoul strtoull strtod atoi atol atof \
+  isalpha isalnum isspace isdigit isupper islower isxdigit isprint iscntrl \
+  toupper tolower \
+  strerror perror getcwd getenv asprintf \
+  __error __isthreaded \
+  __stderrp __stdinp __stdoutp \
+  __inet_ntop __inet_pton __inet_addr __inet_aton \
+  in6addr_any
+
+# libSceUserService.sprx
+fix_stub libSceUserService.sprx libSceUserService.so \
+  sceUserServiceInitialize sceUserServiceFinalize sceUserServiceGetForegroundUser
+
+# libSceSystemService.sprx  (was .so — SONAME was wrong)
 fix_stub libSceSystemService.sprx libSceSystemService.so \
   sceSystemServiceInitialize sceSystemServiceLaunchApp \
   sceSystemServiceLaunchWebBrowser sceSystemServiceParamGetString
 
+# libSceAppInstUtil.sprx  (was .so — SONAME was wrong)
 fix_stub libSceAppInstUtil.sprx libSceAppInstUtil.so \
   sceAppInstUtilInitialize sceAppInstUtilAppInstallPkg \
-  sceAppInstUtilAppRecover sceAppInstUtilAppUnInstall \
-  sceAppInstUtilGetAppInfo
+  sceAppInstUtilAppRecover sceAppInstUtilAppUnInstall sceAppInstUtilGetAppInfo
+
+# libSceSysmodule.sprx  — keep SDK original if it exists, else make a stub
+if ! readelf -d "$SDK_STUBS/libSceSysmodule.so" 2>/dev/null | grep -q 'libSceSysmodule.sprx'; then
+  fix_stub libSceSysmodule.sprx libSceSysmodule.so \
+    sceSysmoduleLoadModule sceSysmoduleUnloadModule sceSysmoduleIsLoaded
+fi
 
 # =============================================================================
 # [1/3] Compile
 # =============================================================================
-CFLAGS="--target=x86_64-sie-ps5 --sysroot=$SDK -isystem $SDK/include -isystem $SDK/include/freebsd -I$PAYLOAD -I$PAYLOAD/libprosperopkg/include -O2 -std=gnu11 -ffreestanding -fno-builtin -nostdlib -fPIC -fno-plt -fno-stack-protector -Wall -Wno-incompatible-pointer-types"
+CFLAGS="--target=x86_64-sie-ps5 --sysroot=$SDK \
+  -isystem $SDK/include -isystem $SDK/include/freebsd \
+  -I$PAYLOAD -I$PAYLOAD/libprosperopkg/include \
+  -O2 -std=gnu11 -ffreestanding -fno-builtin -nostdlib \
+  -fPIC -fno-plt -fno-stack-protector \
+  -Wall -Wno-incompatible-pointer-types"
 
 echo "==> [1/3] Compiling..."
 OBJS=""
 for src in "$PAYLOAD"/*.c "$PAYLOAD"/libprosperopkg/src/*.c; do
-  if [ ! -f "$src" ]; then continue; fi
+  [ -f "$src" ] || continue
   base=$(basename "$src" .c)
   obj="$BUILD/${base}.o"
   echo "  cc $base.c"
@@ -95,8 +126,6 @@ done
 
 # =============================================================================
 # [2/3] Link
-# Same as the working 448KB build except:
-#   - removed -lSceLncUtil (none of the reference payloads use it)
 # =============================================================================
 echo "==> [2/3] Linking..."
 $LDLLD -m elf_x86_64 \
@@ -110,6 +139,8 @@ $LDLLD -m elf_x86_64 \
   -lSceLibcInternal \
   -lSceAppInstUtil \
   -lSceSystemService \
+  -lSceUserService \
+  -lSceSysmodule \
   --allow-shlib-undefined \
   -o "$BUILD/quaza_payload.elf"
 
