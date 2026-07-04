@@ -76,8 +76,124 @@ if (dumpPathInput) {
     });
 }
 
+// ── Mode switching: PS5 Remote vs This Device (local WASM build) ────────
+let currentMode = 'remote';
+let localFiles = null;
+
+const modeTabRemote  = document.getElementById('modeTabRemote');
+const modeTabLocal   = document.getElementById('modeTabLocal');
+const modeHint       = document.getElementById('modeHint');
+const remoteFields    = document.getElementById('remoteFields');
+const localFields     = document.getElementById('localFields');
+const backportRow     = document.getElementById('backportRow');
+const localFolderInput = document.getElementById('localFolderInput');
+const localBrowseBtn  = document.getElementById('localBrowseBtn');
+const localFolderHint = document.getElementById('localFolderHint');
+const convertBtnEl    = document.getElementById('convertBtn');
+
+function setMode(mode) {
+    currentMode = mode;
+    modeTabRemote.classList.toggle('active', mode === 'remote');
+    modeTabLocal.classList.toggle('active', mode === 'local');
+    remoteFields.style.display = mode === 'remote' ? '' : 'none';
+    localFields.style.display  = mode === 'local' ? '' : 'none';
+    backportRow.style.display  = mode === 'remote' ? '' : 'none';
+    convertBtnEl.textContent = mode === 'remote'
+        ? 'Compile & Deploy Native PKG'
+        : 'Convert on This Device';
+}
+
+if (modeTabRemote && modeTabLocal) {
+    modeTabRemote.addEventListener('click', () => setMode('remote'));
+    modeTabLocal.addEventListener('click', () => setMode('local'));
+}
+
+if (localBrowseBtn && localFolderInput) {
+    localBrowseBtn.addEventListener('click', () => localFolderInput.click());
+    localFolderInput.addEventListener('change', async () => {
+        localFiles = localFolderInput.files;
+        if (!localFiles || localFiles.length === 0) {
+            localFolderHint.textContent = 'No folder selected.';
+            return;
+        }
+        const rootName = (localFiles[0].webkitRelativePath || '').split('/')[0] || 'folder';
+        localFolderHint.textContent = `${rootName} — ${localFiles.length} files selected.`;
+
+        if (autoDetectHint) {
+            autoDetectHint.textContent = 'Detecting…';
+            autoDetectHint.style.color = '#4a8aaa';
+        }
+        try {
+            const detected = window.QuazaSfo && await window.QuazaSfo.detectContentIdFromFiles(localFiles);
+            if (detected) {
+                contentIdInput.value = detected;
+                if (autoDetectHint) {
+                    autoDetectHint.textContent = '✓ Content ID detected from param.sfo';
+                    autoDetectHint.style.color = '#1a7a40';
+                }
+            } else if (autoDetectHint) {
+                autoDetectHint.textContent = 'Could not detect — enter Content ID manually.';
+                autoDetectHint.style.color = '#8a5500';
+            }
+        } catch (e) {
+            console.warn('[Quaza] local content-id detection failed:', e);
+        }
+    });
+}
+
+// If no real PS5 payload is reachable, nudge the user toward local
+// conversion automatically (still lets them switch back manually).
+if (demo && demo.isDemoMode() && modeTabLocal) {
+    setTimeout(() => {
+        if (window.QUAZA_DEMO === true) {
+            modeHint.style.display = 'block';
+            modeHint.textContent = 'No PS5 payload detected — try "This Device" to convert locally in your browser, no PS5 required.';
+        }
+    }, 400);
+}
+
+function runLocalConversion() {
+    const statusBox   = document.getElementById('status-box');
+    const statusTxt    = document.getElementById('statusTxt');
+    const progressBar  = document.getElementById('progressBar');
+    const contentId    = contentIdInput.value.trim();
+
+    if (!localFiles || localFiles.length === 0) {
+        alert('Please choose a game dump folder first.');
+        return;
+    }
+    if (!contentId) {
+        alert('Please enter the Content ID (or select a folder to auto-detect).');
+        return;
+    }
+
+    statusBox.style.display  = 'block';
+    statusBox.style.borderLeftColor = 'var(--primary)';
+    progressBar.style.width  = '30%';
+    progressBar.style.backgroundColor = 'var(--primary)';
+    convertBtnEl.disabled = true;
+
+    window.QuazaWasm.buildPkgFromFiles(localFiles, contentId, {
+        onStage: (msg) => { statusTxt.textContent = msg; }
+    }).then((bytes) => {
+        progressBar.style.width = '100%';
+        statusTxt.textContent = 'PKG built successfully on this device!';
+        window.QuazaWasm.downloadBytes(bytes, `${contentId}.pkg`);
+        convertBtnEl.disabled = false;
+    }).catch((err) => {
+        console.error('Local build failed:', err);
+        statusTxt.textContent = `Local build failed: ${err.message || err}`;
+        progressBar.style.backgroundColor = '#ff4444';
+        convertBtnEl.disabled = false;
+    });
+}
+
 // ── Conversion ───────────────────────────────────────────────────────────
 document.getElementById('convertBtn').addEventListener('click', () => {
+    if (currentMode === 'local') {
+        runLocalConversion();
+        return;
+    }
     const dumpPath  = dumpPathInput.value.trim();
     const contentId = contentIdInput.value.trim();
     const enableBackport = document.getElementById('enableBackport').checked;

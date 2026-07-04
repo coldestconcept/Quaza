@@ -1,0 +1,2 @@
+- [Emscripten build cache on Replit/Nix](emscripten-replit-cache.md) — Nix's emcc cache is read-only; use a symlinked sysroot + writable overlay + -g -O0, don't mirror the whole tree.
+- [WASM local PKG conversion architecture](wasm-local-conversion.md) — browser mode reuses the same C engine as the PS5 payload via MEMFS; reuse `window.QUAZA_DEMO` for no-payload detection.

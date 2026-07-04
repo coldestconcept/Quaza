@@ -335,6 +335,46 @@
         }
         .browser-select-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
+        /* ── Mode tabs (PS5 Remote vs This Device) ── */
+        .mode-tabs {
+            display: flex;
+            gap: 6px;
+            background: rgba(255,255,255,0.35);
+            border: 1.5px solid rgba(255,255,255,0.7);
+            border-radius: 12px;
+            padding: 4px;
+            margin-bottom: 0.7rem;
+        }
+        .mode-tab {
+            flex: 1;
+            padding: 8px 10px;
+            border: none;
+            border-radius: 9px;
+            background: transparent;
+            color: #2e6080;
+            font-size: 0.82rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+        }
+        .mode-tab.active {
+            background: rgba(94, 207, 238, 0.4);
+            color: #0d3550;
+            box-shadow: 0 1px 4px rgba(20,90,120,0.18);
+        }
+        .mode-hint {
+            margin-bottom: 1rem;
+            margin-top: -2px;
+        }
+        .local-browse-btn {
+            background: rgba(255, 255, 255, 0.55) !important;
+            border: 1.5px solid rgba(255,255,255,0.8) !important;
+            color: #1a7fa0 !important;
+            box-shadow: none !important;
+            font-weight: 700;
+        }
+        .local-browse-btn:hover { background: rgba(94, 207, 238, 0.28) !important; }
+
         /* ── Checkbox ── */
         .check-row {
             display: flex;
@@ -448,15 +488,32 @@
 
     <p class="section-title">PKG Converter</p>
 
-    <div class="field">
-        <label for="dumpPath">Decrypted Title Directory Path</label>
-        <div class="path-row">
-            <input type="text" id="dumpPath" placeholder="/mnt/usb0/CUSA00000-app">
-            <button type="button" class="browse-btn" id="browseBtn" title="Browse for folder" aria-label="Browse for folder">
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M3 6.5C3 5.67157 3.67157 5 4.5 5H9.17157C9.5891 5 10.0335 5.17851 10.3336 5.49881L11.5 7H19.5C20.3284 7 21 7.67157 21 8.5V17.5C21 18.3284 20.3284 19 19.5 19H4.5C3.67157 19 3 18.3284 3 17.5V6.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
-                </svg>
-            </button>
+    <div class="mode-tabs" id="modeTabs">
+        <button type="button" class="mode-tab active" id="modeTabRemote" data-mode="remote">PS5 Remote</button>
+        <button type="button" class="mode-tab" id="modeTabLocal" data-mode="local">This Device</button>
+    </div>
+    <div class="hint mode-hint" id="modeHint" style="display:none;"></div>
+
+    <div id="remoteFields">
+        <div class="field">
+            <label for="dumpPath">Decrypted Title Directory Path</label>
+            <div class="path-row">
+                <input type="text" id="dumpPath" placeholder="/mnt/usb0/CUSA00000-app">
+                <button type="button" class="browse-btn" id="browseBtn" title="Browse for folder" aria-label="Browse for folder">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M3 6.5C3 5.67157 3.67157 5 4.5 5H9.17157C9.5891 5 10.0335 5.17851 10.3336 5.49881L11.5 7H19.5C20.3284 7 21 7.67157 21 8.5V17.5C21 18.3284 20.3284 19 19.5 19H4.5C3.67157 19 3 18.3284 3 17.5V6.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="localFields" style="display:none;">
+        <div class="field">
+            <label for="localFolderInput">Game Dump Folder (on this device)</label>
+            <input type="file" id="localFolderInput" webkitdirectory directory multiple style="display:none;">
+            <button type="button" class="btn local-browse-btn" id="localBrowseBtn">Choose Folder…</button>
+            <div class="hint" id="localFolderHint">No folder selected.</div>
         </div>
     </div>
 
@@ -466,7 +523,7 @@
         <div class="hint" id="autoDetectHint">Tab out of the path above to auto-detect.</div>
     </div>
 
-    <div class="check-row">
+    <div class="check-row" id="backportRow">
         <input type="checkbox" id="enableBackport" checked>
         <label for="enableBackport">Auto-query prosperopatches.com for delta down-ports</label>
     </div>
@@ -518,6 +575,8 @@
 <script src="js/snow.js"></script>
 <script src="js/demo.js"></script>
 <script src="js/browser.js"></script>
+<script src="js/sfo-parser.js"></script>
+<script src="js/wasm-builder.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
