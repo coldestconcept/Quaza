@@ -155,6 +155,8 @@ echo "==> [2/3] Linking..."
 $LDLLD -m elf_x86_64 \
   --sysroot="$SDK" \
   -pie \
+  -z max-page-size=0x4000 \
+  -z noseparate-code \
   -L"$SDK_STUBS" \
   "$SDK_CRT/crt1.o" \
   $OBJS \
