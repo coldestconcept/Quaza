@@ -16,11 +16,6 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Setup Python Environment
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.x'
-
     - name: Set up PS5 Payload SDK Toolchain
       run: |
         sudo apt-get update && sudo apt-get install -y wget unzip cmake make
@@ -30,19 +25,13 @@ jobs:
         rm sdk.zip
         echo "PS5_PAYLOAD_SDK=$HOME/target-sdk/ps5-payload-sdk" >> $GITHUB_ENV
 
-    - name: Pre-Generate Hardcoded Assets Externally
-      run: |
-        cd payload
-        python3 tools/gen_embed.py || true
-        mkdir -p build
-        python3 tools/gen_param_sfo.py sce_sys/param_sfo_config.json build/param.sfo || true
-        python3 tools/gen_sfo_embed.py build/param.sfo sfo_embed.h || true
-
     - name: Configure and Execute CMake Cross-Compilation
       run: |
         cd payload
         mkdir -p build && cd build
-        cmake -DCMAKE_TOOLCHAIN_FILE="${{ env.PS5_PAYLOAD_SDK }}/toolchain/prospero.cmake" -DCMAKE_C_COMPILER_WORKS=1 ..
+        cmake -DCMAKE_TOOLCHAIN_FILE="${{ env.PS5_PAYLOAD_SDK }}/toolchain/prospero.cmake" \
+              -DCMAKE_C_COMPILER_WORKS=1 \
+              -DSDK_PATH="${{ env.PS5_PAYLOAD_SDK }}/target" ..
         cmake --build .
 
     - name: Upload Completed Production Packages
