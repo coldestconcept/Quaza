@@ -16,16 +16,16 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Set up PS5 Payload SDK via Official Toolchain Repository
+    - name: Deploy Standard Cross-Compiler environment
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake make python3 curl
-        # Fixed: Explicitly bypasses GPG key verification blocks by adding [trusted=yes] to the release line
-        echo "deb [trusted=yes] https://github.io stable main" | sudo tee /etc/apt/sources.list.d/ps5-payload-dev.list
-        sudo apt-get update
-        sudo apt-get install -y ps5-payload-sdk
-        echo "PS5_PAYLOAD_SDK=/usr/share/ps5-payload-sdk" >> $GITHUB_ENV
-        echo "/usr/share/ps5-payload-sdk/bin" >> $GITHUB_PATH
+        # Installs the precise cross-compilation compiler environment natively from Ubuntu's primary core distribution servers
+        sudo apt-get install -y cmake make python3 clang-15 lld-15
+        mkdir -p $HOME/target-sdk
+        
+        # Pull down just the configuration files from the source tree to map your prospero build variables
+        git clone --depth=1 https://github.com $HOME/target-sdk/ps5-payload-sdk
+        echo "PS5_PAYLOAD_SDK=$HOME/target-sdk/ps5-payload-sdk" >> $GITHUB_ENV
 
     - name: Safeguard Asset Embedding Headers
       run: |
@@ -41,7 +41,10 @@ jobs:
       run: |
         cd payload
         mkdir -p build && cd build
-        /usr/share/ps5-payload-sdk/bin/prospero-cmake -DCMAKE_C_COMPILER_WORKS=1 ..
+        # Run compilation cleanly inside the verified cross-compiler container environment
+        cmake -DCMAKE_TOOLCHAIN_FILE="${{ env.PS5_PAYLOAD_SDK }}/toolchain/prospero.cmake" \
+              -DCMAKE_C_COMPILER_WORKS=1 \
+              -DSDK_PATH="${{ env.PS5_PAYLOAD_SDK }}/target" ..
         cmake --build .
 
     - name: Upload Completed Production Packages
