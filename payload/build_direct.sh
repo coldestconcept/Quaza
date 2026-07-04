@@ -128,13 +128,15 @@ done
 # [2/3] Link
 # =============================================================================
 echo "==> [2/3] Linking..."
+# libc.a is NOT listed here: it is an import-stub archive whose printf.o etc.
+# fight with our comprehensive dynamic stubs and cause "undefined symbol" errors.
+# All libc symbols resolve at runtime from libSceLibcInternal.sprx (DT_NEEDED).
 $LDLLD -m elf_x86_64 \
   --sysroot="$SDK" \
   -pie \
   -L"$SDK_STUBS" \
   "$SDK_CRT/crt1.o" \
   $OBJS \
-  "$SDK_LIBC/libc.a" \
   -lkernel \
   -lSceLibcInternal \
   -lSceAppInstUtil \
