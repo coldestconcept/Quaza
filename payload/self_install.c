@@ -1,7 +1,22 @@
+/*
+ * self_install.c — install Quaza into the PS5 game library via a fake PKG.
+ *
+ * ELF Arsenal reverse-engineered approach:
+ *   1. Use our own pkg_builder to create a minimal tile PKG in /data/quaza/.
+ *   2. Call sceAppInstUtilAppInstallPkg() on that PKG file.
+ *      This is the same function ELF Arsenal uses — it installs a fake/unsigned
+ *      PKG directly on the jailbroken console's content database.
+ *   3. Write a sentinel file so subsequent runs skip the whole process.
+ *
+ * The old approach (AppPrepareInstall → write files → AppInstall) was wrong:
+ *   AppPrepareInstall is a PSN download-staging call and always failed for
+ *   direct installs, causing an early abort before any files were written.
+ */
+
 #include "self_install.h"
-#include "jailbreak_detect.h"   /* safe pre-flight check — no kstuff APIs */
-#include "kstuff_lite.h"        /* bridge to already-running kstuff        */
-#include "sfo_embed.h"          /* g_param_sfo_data / g_param_sfo_size     */
+#include "jailbreak_detect.h"
+#include "kstuff_lite.h"
+#include "tile_pkg_embed.h"     /* g_tile_pkg_data / g_tile_pkg_size — built at compile time */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,259 +28,128 @@
 #include <errno.h>
 
 /* ── App identity ────────────────────────────────────────────────────── */
-#define QUAZA_TITLE_ID   "QUAZ00001"
-#define QUAZA_CONTENT_ID "EP0000-QUAZ00001_00-QUAZAPKGTOOL0001"
-#define INSTALL_BASE     "/user/app/" QUAZA_TITLE_ID
+#define QUAZA_TITLE_ID    "QUAZ00001"
+#define QUAZA_CONTENT_ID  "EP0000-QUAZ00001_00-QUAZAPKGTOOL0001"
+
+/* Working paths (writable on jailbroken PS5) */
+#define QUAZA_DATA_DIR    "/data/quaza"
+#define TILE_PKG_PATH     QUAZA_DATA_DIR "/quaza-tile.pkg"
+#define INSTALL_STAMP     QUAZA_DATA_DIR "/.installed"
 
 /* ── sceAppInstUtil bindings ─────────────────────────────────────────── */
-/*
- * These are resolved at link time via libSceAppInstUtil from the
- * PS5 Payload SDK.  Prototypes sourced from ps5-payload-dev headers.
- */
 extern int sceAppInstUtilInitialize(void);
-extern int sceAppInstUtilGetAppList(char **list_out, int *count_out);
-extern int sceAppInstUtilAppPrepareInstall(const char *content_id,
-                                           const char *title_id,
-                                           int        flags);
-extern int sceAppInstUtilAppInstall(const char *title_id);
-extern int sceAppInstUtilAppRecover(const char *title_id);   /* triggers DB refresh */
-extern int sceUserServiceInitialize(void *param);            /* NULL for defaults  */
+/*
+ * sceAppInstUtilAppInstallPkg — installs a (fake) PKG file.
+ * This is what ELF Arsenal uses.  The second arg is an options struct;
+ * NULL is accepted and means "use defaults".
+ */
+extern int sceAppInstUtilAppInstallPkg(const char *pkg_path, void *options);
+extern int sceAppInstUtilAppRecover(const char *title_id);
+extern int sceUserServiceInitialize(void *param);
 
 /* ── Helpers ─────────────────────────────────────────────────────────── */
 
-/* Create a directory (and parents) — ignores EEXIST. */
-static int mkdirs(const char *path) {
-    char tmp[512];
-    strncpy(tmp, path, sizeof(tmp) - 1);
-    for (char *p = tmp + 1; *p; p++) {
-        if (*p == '/') {
-            *p = '\0';
-            if (mkdir(tmp, 0755) < 0 && errno != EEXIST) {
-                fprintf(stderr, "[install] mkdir(%s): %s\n", tmp, strerror(errno));
-                return -1;
-            }
-            *p = '/';
-        }
-    }
-    if (mkdir(tmp, 0755) < 0 && errno != EEXIST) {
-        fprintf(stderr, "[install] mkdir(%s): %s\n", tmp, strerror(errno));
+static int make_dir(const char *path) {
+    if (mkdir(path, 0755) < 0 && errno != EEXIST) {
+        fprintf(stderr, "[install] mkdir(%s): %s\n", path, strerror(errno));
         return -1;
     }
     return 0;
 }
 
-/* Write a byte buffer to a file, creating or overwriting it. */
-static int write_file(const char *path,
-                      const void *data, size_t size) {
+static int write_file(const char *path, const void *data, size_t size) {
     int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd < 0) {
         fprintf(stderr, "[install] open(%s): %s\n", path, strerror(errno));
         return -1;
     }
-    ssize_t written = write(fd, data, size);
+    ssize_t w = write(fd, data, size);
     close(fd);
-    if (written != (ssize_t)size) {
+    if (w != (ssize_t)size) {
         fprintf(stderr, "[install] short write to %s\n", path);
         return -1;
     }
     return 0;
 }
 
-/* Copy the running ELF to dest_path for use as eboot.bin. */
-static int copy_self(const char *dest_path) {
-    /* On PS5 (FreeBSD) the running process image is at /proc/self/exe */
-    const char *self_path = "/proc/self/exe";
-    int src = open(self_path, O_RDONLY);
-    if (src < 0) {
-        fprintf(stderr, "[install] Cannot open self (%s): %s\n",
-                self_path, strerror(errno));
-        return -1;
-    }
-
-    int dst = open(dest_path, O_WRONLY | O_CREAT | O_TRUNC, 0755);
-    if (dst < 0) {
-        fprintf(stderr, "[install] Cannot create eboot.bin: %s\n", strerror(errno));
-        close(src);
-        return -1;
-    }
-
-    char buf[65536];
-    ssize_t n;
-    int ok = 1;
-    while ((n = read(src, buf, sizeof(buf))) != 0) {
-        if (n < 0) {
-            fprintf(stderr, "[install] Read error from %s: %s\n",
-                    self_path, strerror(errno));
-            ok = 0;
-            break;
-        }
-        if (write(dst, buf, (size_t)n) != n) {
-            fprintf(stderr, "[install] Write error for eboot.bin: %s\n",
-                    strerror(errno));
-            ok = 0;
-            break;
-        }
-    }
-    close(src);
-    close(dst);
-    if (!ok) {
-        unlink(dest_path);   /* remove partial file so it can't be used */
-        return -1;
-    }
-    return 0;
-}
-
-/* ── Sentinel file ───────────────────────────────────────────────────── */
-/* We write a small stamp file after a successful install so subsequent
- * runs skip the whole process without calling sceAppInstUtil again.    */
-#define INSTALL_STAMP  INSTALL_BASE "/sce_sys/.quaza_installed"
+/* ── Public API ──────────────────────────────────────────────────────── */
 
 int self_install_is_done(void) {
     return access(INSTALL_STAMP, F_OK) == 0;
 }
 
-/* ── Main install routine ────────────────────────────────────────────── */
 install_result_t self_install_run(void) {
     if (self_install_is_done()) {
         printf("[install] Already installed — skipping.\n");
         return INSTALL_OK;
     }
 
-    printf("[install] First run detected — installing Quaza to game library...\n");
+    printf("[install] First run — installing Quaza tile to game library...\n");
 
-    /* ── Step 1: detect active jailbreak BEFORE touching any kernel API ── */
-    /*
-     * Calling kstuff_init() without an active kstuff bridge will kernel-panic
-     * the PS5.  We inspect filesystem paths only (no kstuff calls) to confirm
-     * the bridge is already running before we ever talk to it.
-     *
-     * Supported environments:
-     *   FW ≤9.xx  — GoldHEN / etaHEN (both load kstuff internally)
-     *   FW ≤12.70 — kstuff-lite via ps5-payload-elfldr (current standard)
-     *
-     * Quaza does NOT ship or install kstuff-lite; it must already be active.
-     */
+    /* ── Pre-flight: confirm jailbreak bridge is active ────────────── */
     jb_type_t jb = jailbreak_detect();
     printf("[install] Jailbreak environment: %s\n", jailbreak_name(jb));
 
     if (!jailbreak_can_install(jb)) {
-        /* Expected on a device where kstuff isn't loaded yet — not an error */
-        printf("[install] No kstuff bridge found (/dev/kstuff or /tmp/kstuff.sock).\n"
-               "[install]   On FW 12.70: inject ps5-payload-elfldr + kstuff FIRST,\n"
-               "[install]   then re-inject this ELF to auto-install to the game library.\n"
-               "[install]   Continuing as injected payload — all features still work.\n");
+        printf("[install] No kstuff bridge found — skipping install.\n"
+               "[install]   Inject kstuff first, then re-inject Quaza.\n"
+               "[install]   All server features still work without the tile.\n");
         return INSTALL_SKIPPED;
     }
 
-    /* Bridge confirmed present — now safe to initialise it */
-    printf("[install] Connecting to kstuff-lite bridge...\n");
     if (kstuff_init() != 0) {
-        fprintf(stderr, "[install] kstuff_init() failed even though bridge path exists.\n"
-                        "[install]   The bridge process may have crashed — re-inject kstuff.\n");
+        fprintf(stderr, "[install] kstuff_init() failed — bridge may have crashed.\n");
         return INSTALL_ERROR;
     }
     printf("[install] kstuff-lite ready.\n");
 
-    /*
-     * 0x80990085 — sceAppInstUtil "already prepared / title already exists"
-     * This is the only non-zero code from AppPrepareInstall we treat as benign.
-     * All other non-zero codes are genuine failures.
+    /* ── Step 1: write the embedded tile PKG to disk ───────────────────
+     *
+     * g_tile_pkg_data / g_tile_pkg_size come from tile_pkg_embed.h,
+     * generated at compile time by:
+     *   payload/tools/pkg_builder_main.c  (native PKG builder)
+     *   payload/tools/gen_embed_pkg.py    (C header generator)
+     *
+     * Fully offline — no runtime PKG assembly, no internet needed.
      */
-#define SCE_APPINSTUTIL_ERROR_ALREADY_EXISTS  0x80990085u
+    printf("[install] Writing tile PKG (%zu bytes) → %s\n",
+           g_tile_pkg_size, TILE_PKG_PATH);
 
-    /* ── Step 2: initialise user/app-install services ───────────────── */
+    if (make_dir(QUAZA_DATA_DIR) != 0) return INSTALL_ERROR;
+    if (write_file(TILE_PKG_PATH, g_tile_pkg_data, g_tile_pkg_size) != 0)
+        return INSTALL_ERROR;
+
+    /* ── Step 2: install the PKG ────────────────────────────────────── */
+    printf("[install] Initialising sceAppInstUtil...\n");
     int rc;
     rc = sceUserServiceInitialize(NULL);
-    if (rc != 0) {
-        fprintf(stderr, "[install] sceUserServiceInitialize() rc=0x%08x\n",
-                (unsigned)rc);
-        return INSTALL_ERROR;
-    }
+    if (rc != 0)
+        fprintf(stderr, "[install] sceUserServiceInitialize rc=0x%08x "
+                "(may be already init)\n", (unsigned)rc);
+
     rc = sceAppInstUtilInitialize();
+    if (rc != 0)
+        fprintf(stderr, "[install] sceAppInstUtilInitialize rc=0x%08x\n",
+                (unsigned)rc);
+
+    printf("[install] Installing PKG via sceAppInstUtilAppInstallPkg...\n");
+    rc = sceAppInstUtilAppInstallPkg(TILE_PKG_PATH, NULL);
     if (rc != 0) {
-        fprintf(stderr, "[install] sceAppInstUtilInitialize() rc=0x%08x\n",
+        fprintf(stderr, "[install] sceAppInstUtilAppInstallPkg rc=0x%08x\n",
                 (unsigned)rc);
         return INSTALL_ERROR;
     }
 
-    /* ── Step 3: reserve the TITLE_ID slot in the content database ──── */
-    printf("[install] Reserving title slot %s...\n", QUAZA_TITLE_ID);
-    rc = sceAppInstUtilAppPrepareInstall(QUAZA_CONTENT_ID, QUAZA_TITLE_ID, 0);
-    if (rc != 0 && (unsigned)rc != SCE_APPINSTUTIL_ERROR_ALREADY_EXISTS) {
-        fprintf(stderr, "[install] sceAppInstUtilAppPrepareInstall() "
-                "rc=0x%08x — aborting.\n", (unsigned)rc);
-        return INSTALL_ERROR;
-    }
-    if ((unsigned)rc == SCE_APPINSTUTIL_ERROR_ALREADY_EXISTS)
-        printf("[install] Title slot already reserved — continuing.\n");
-
-    /* ── Step 4: write the app directory structure ───────────────────── */
-    printf("[install] Creating app directory structure...\n");
-
-    if (mkdirs(INSTALL_BASE "/sce_sys") != 0) return INSTALL_ERROR;
-
-    /* param.sfo — embedded at build time by gen_param_sfo.py */
-    printf("[install] Writing param.sfo...\n");
-    if (write_file(INSTALL_BASE "/sce_sys/param.sfo",
-                   g_param_sfo_data, g_param_sfo_size) != 0) return INSTALL_ERROR;
-
-    /* icon0.png — look alongside the ELF; skip (default icon) if absent */
-    const char *icon_src = "/data/pkg_tool/sce_sys/icon0.png";
-    if (access(icon_src, R_OK) == 0) {
-        printf("[install] Copying icon0.png...\n");
-        int isrc = open(icon_src, O_RDONLY);
-        if (isrc >= 0) {
-            struct stat st;
-            if (fstat(isrc, &st) == 0 && st.st_size > 0) {
-                char *ibuf = malloc((size_t)st.st_size);
-                if (ibuf) {
-                    ssize_t nr = read(isrc, ibuf, (size_t)st.st_size);
-                    if (nr == (ssize_t)st.st_size)
-                        write_file(INSTALL_BASE "/sce_sys/icon0.png",
-                                   ibuf, (size_t)st.st_size);
-                    else
-                        fprintf(stderr, "[install] icon0.png read short — skipping\n");
-                    free(ibuf);
-                }
-            }
-            close(isrc);
-        }
-    } else {
-        printf("[install] icon0.png not found at %s — "
-               "game library will show default icon.\n", icon_src);
-    }
-
-    /* eboot.bin — self-copy so clicking the icon re-launches us */
-    printf("[install] Writing eboot.bin (self-copy)...\n");
-    if (copy_self(INSTALL_BASE "/eboot.bin") != 0) return INSTALL_ERROR;
-
-    /* ── Step 5: register with the PS5 content database ─────────────── */
-    printf("[install] Registering with PS5 content database...\n");
-    rc = sceAppInstUtilAppInstall(QUAZA_TITLE_ID);
-    if (rc != 0) {
-        fprintf(stderr, "[install] sceAppInstUtilAppInstall() rc=0x%08x\n",
-                (unsigned)rc);
-        /* Fall through to AppRecover — it can succeed even when AppInstall
-         * returns a soft error on already-staged installs.              */
-    }
-
+    /* AppRecover triggers the shell UI refresh so the icon appears now */
     rc = sceAppInstUtilAppRecover(QUAZA_TITLE_ID);
-    if (rc != 0) {
-        fprintf(stderr, "[install] sceAppInstUtilAppRecover() rc=0x%08x "
-                "— DB refresh may not have taken effect.\n", (unsigned)rc);
-        /* Still considered a failed install; do NOT write sentinel. */
-        return INSTALL_ERROR;
-    }
+    if (rc != 0)
+        fprintf(stderr, "[install] sceAppInstUtilAppRecover rc=0x%08x "
+                "(icon may appear after reboot)\n", (unsigned)rc);
 
-    /* ── Step 6: write sentinel ONLY on confirmed success ────────────── */
-    if (write_file(INSTALL_STAMP, "1", 1) != 0) {
-        fprintf(stderr, "[install] Warning: could not write install stamp — "
-                "will re-run install next launch (harmless).\n");
-    }
+    /* ── Step 4: write sentinel ──────────────────────────────────────── */
+    if (write_file(INSTALL_STAMP, "1", 1) != 0)
+        fprintf(stderr, "[install] Warning: no sentinel — will retry next run.\n");
 
-    printf("[install] ✓ Quaza installed! "
-           "It will appear in your PS5 game library.\n");
-    printf("[install]   You can now launch it from the library "
-           "instead of injecting the ELF.\n");
+    printf("[install] ✓ Quaza tile installed — check your PS5 game library!\n");
     return INSTALL_OK;
 }
