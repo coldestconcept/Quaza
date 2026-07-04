@@ -59,18 +59,12 @@ include_directories(
     ${PS5_SDK}/common
     # kstuff-lite headers (from the PS5 Payload SDK — NOT bundled with Quaza;
     # kstuff must already be running in the system before the ELF is injected)
-    ${PS5_SDK}/include/kstuff
-)
-
-    ${PS5_SDK}/lib/ps5-payload-sdk
-    ${PS5_SDK}/ps5-payload-sdk/lib
-    ${PS5_SDK}/lib/ps5-payload-sdk
-    ${PS5_SDK}/ps5-payload-sdk/lib
-    ${PS5_SDK}/lib/ps5-payload-sdk
-    ${PS5_SDK}/ps5-payload-sdk/lib
 link_directories(
     ${PS5_SDK}/lib
-    # No ${PS5_SDK}/lib/kstuff — we do NOT link kstuff statically.
+    ${PS5_SDK}/lib/kstuff_stub
+    "${PS5_SDK}/lib/ps5-payload-sdk"
+    "${PS5_SDK}/ps5-payload-sdk/lib"
+)
     # At runtime we call through the already-running kstuff bridge socket.
     # The kstuff_lite.h declarations are resolved via the SDK import library
     # (libkstuff_stub.a), which connects to /dev/kstuff or /tmp/kstuff.sock.
