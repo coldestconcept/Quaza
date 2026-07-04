@@ -5,20 +5,24 @@
 
 /*
  * browser_get_local_url
- * ─────────────────────
- * Fills `buf` with the PS5's LAN URL, e.g. "http://192.168.1.42:4242".
- * Falls back to "http://127.0.0.1:4242" if no LAN IP is detected.
- * Call this before browser_launch() and before displaying the URL to the user.
+ * Fills buf with "http://<LAN-IP>:4242". Falls back to 127.0.0.1.
  */
 int browser_get_local_url(char *buf, size_t buflen);
 
 /*
- * browser_launch
- * ──────────────
- * Open the PS5 WebKit browser at `url`.
- * Tries sceSystemServiceLaunchWebBrowser first, then sceLncUtilLaunchWebBrowser2.
- * Call after pkg_server_init() so the server is ready before the browser opens.
+ * browser_notify
+ * Sends an on-screen PS5 notification containing the URL.
+ * Call this FIRST — before server init, before browser launch.
+ * Always returns immediately; never crashes even if the syscall fails.
  */
-int browser_launch(const char *url);
+int browser_notify(const char *url);
+
+/*
+ * browser_launch_app
+ * Opens the PS5 WebKit browser at url via sceSystemServiceLaunchApp,
+ * falling back to sceLncUtilLaunchWebBrowser2.
+ * Non-fatal — returns -1 on failure, 0 on success.
+ */
+int browser_launch_app(const char *url);
 
 #endif /* BROWSER_LAUNCH_H */
