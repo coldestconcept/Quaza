@@ -20,10 +20,11 @@ jobs:
       run: |
         sudo apt-get update && sudo apt-get install -y wget unzip cmake make python3 curl
         mkdir -p $HOME/target-sdk
-        # Fixed: Uses curl with full follow-location headers to ensure the real 8.4MB binary ZIP downloads completely
-        curl -L "https://github.com/ps5-payload-dev/sdk/releases/latest/download/ps5-payload-sdk.zip" -o sdk.zip
+        curl -L "https://github.com" -o sdk.zip
         unzip -o sdk.zip -d $HOME/target-sdk
         rm sdk.zip
+        # Append toolchain binaries directory to system execution path
+        echo "$HOME/target-sdk/ps5-payload-sdk/bin" >> $GITHUB_PATH
         echo "PS5_PAYLOAD_SDK=$HOME/target-sdk/ps5-payload-sdk" >> $GITHUB_ENV
 
     - name: Safeguard Asset Embedding Headers
@@ -36,14 +37,12 @@ jobs:
             python3 tools/gen_param_sfo.py sce_sys/param_sfo_config.json build/param.sfo || echo "Bypassing param SFO generation"
         fi
 
-    - name: Configure and Execute CMake Cross-Compilation
+    - name: Configure and Execute Toolchain Wrapper Cross-Compilation
       run: |
         cd payload
         mkdir -p build && cd build
-        cmake -DCMAKE_TOOLCHAIN_FILE="${{ env.PS5_PAYLOAD_SDK }}/toolchain/prospero.cmake" \
-              -DPS5_PAYLOAD_SDK="${{ env.PS5_PAYLOAD_SDK }}" \
-              -DCMAKE_C_COMPILER_WORKS=1 \
-              -DSDK_PATH="${{ env.PS5_PAYLOAD_SDK }}/target" ..
+        # Fixed: Invokes prospero-cmake to enforce correct linking configurations natively
+        prospero-cmake -DCMAKE_C_COMPILER_WORKS=1 ..
         cmake --build .
 
     - name: Upload Completed Production Packages
