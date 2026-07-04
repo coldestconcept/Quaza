@@ -14,8 +14,6 @@
  */
 
 #include "self_install.h"
-#include "jailbreak_detect.h"
-#include "kstuff_lite.h"
 #include "tile_pkg_embed.h"     /* g_tile_pkg_data / g_tile_pkg_size — built at compile time */
 
 #include <stdio.h>
@@ -85,23 +83,6 @@ install_result_t self_install_run(void) {
     }
 
     printf("[install] First run — installing Quaza tile to game library...\n");
-
-    /* ── Pre-flight: confirm jailbreak bridge is active ────────────── */
-    jb_type_t jb = jailbreak_detect();
-    printf("[install] Jailbreak environment: %s\n", jailbreak_name(jb));
-
-    if (!jailbreak_can_install(jb)) {
-        printf("[install] No kstuff bridge found — skipping install.\n"
-               "[install]   Inject kstuff first, then re-inject Quaza.\n"
-               "[install]   All server features still work without the tile.\n");
-        return INSTALL_SKIPPED;
-    }
-
-    if (kstuff_init() != 0) {
-        fprintf(stderr, "[install] kstuff_init() failed — bridge may have crashed.\n");
-        return INSTALL_ERROR;
-    }
-    printf("[install] kstuff-lite ready.\n");
 
     /* ── Step 1: write the embedded tile PKG to disk ───────────────────
      *

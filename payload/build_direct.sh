@@ -34,7 +34,7 @@ CFLAGS="--target=x86_64-sie-ps5 --sysroot=$SDK -isystem $SDK/include -isystem $S
 echo "==> [1/2] Compiling..."
 OBJS=""
 for src in "$PAYLOAD"/*.c "$PAYLOAD"/libprosperopkg/src/*.c; do
-  [ -f "$src" ] || continue
+  if [ ! -f "$src" ]; then continue; fi
   base=$(basename "$src" .c)
   obj="$BUILD/${base}.o"
   echo "  cc $base.c"
