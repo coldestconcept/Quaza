@@ -14,6 +14,7 @@
 #define PKG_API_PROGRESS    "/api/pkg/progress"
 #define PKG_API_DOWNLOAD    "/api/pkg/download"
 #define PKG_API_SFO_PARSE   "/api/sfo/parse"   /* ?path=<dump_dir> → {"content_id":"..."} */
+#define PKG_API_BROWSE      "/api/browse"      /* ?path=<dir> (omit for root shortcuts) → {"path","parent","entries":[{"name","type"}]} */
 
 /* ── PKG creation status enum ────────────────────────────────────────── */
 typedef enum {
@@ -50,6 +51,7 @@ void handle_create(int client_fd, const char *path, const char *content_id);
 void handle_progress(int client_fd);
 void handle_download(int client_fd, const char *path);
 void handle_sfo_parse(int client_fd, const char *dump_path);
+void handle_browse(int client_fd, const char *dir_path);
 void handle_static(int client_fd, const char *url_path);
 
 /* ── Background PKG worker ───────────────────────────────────────────── */

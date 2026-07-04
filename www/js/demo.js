@@ -96,6 +96,57 @@
         return URL.createObjectURL(blob);
     }
 
+    // ── Simulated filesystem for the folder-picker (/api/browse) ────────
+    // Mirrors what a real jailbroken PS5 would expose: external USB drives
+    // with game dumps on them, plus an internal /data mount.
+    const DEMO_ROOT_SHORTCUTS = ['/mnt/usb0', '/mnt/usb1', '/data'];
+    const DEMO_FS = {
+        '/mnt/usb0': ['CUSA00000-app', 'CUSA00171-app', 'PS5_UPDATE'],
+        '/mnt/usb0/CUSA00000-app': ['sce_sys', 'app0.pkg.tmp', 'eboot.bin'],
+        '/mnt/usb0/CUSA00000-app/sce_sys': ['param.sfo', 'icon0.png', 'pic0.png'],
+        '/mnt/usb0/CUSA00171-app': ['sce_sys', 'eboot.bin'],
+        '/mnt/usb0/CUSA00171-app/sce_sys': ['param.sfo', 'icon0.png'],
+        '/mnt/usb1': ['CUSA00042-app'],
+        '/mnt/usb1/CUSA00042-app': ['sce_sys', 'eboot.bin'],
+        '/mnt/usb1/CUSA00042-app/sce_sys': ['param.sfo'],
+        '/data': ['quaza_output', 'shadowmount'],
+        '/data/quaza_output': [],
+        '/data/shadowmount': ['config.ini'],
+    };
+
+    function demoEntryType(name) {
+        return name.includes('.') ? 'file' : 'dir';
+    }
+
+    // Simulate /api/browse — omit `path` (or pass '') for the root shortcut view.
+    async function mockBrowse(path) {
+        await delay(180);
+
+        if (!path) {
+            return {
+                path: '',
+                parent: null,
+                entries: DEMO_ROOT_SHORTCUTS.map(p => ({ name: p, type: 'dir' })),
+            };
+        }
+
+        const normalized = path.replace(/\/+$/, '') || '/';
+        const children = DEMO_FS[normalized] || [];
+        const entries = children.map(name => ({ name, type: demoEntryType(name) }));
+
+        const isRootShortcut = DEMO_ROOT_SHORTCUTS.includes(normalized);
+        let parent;
+        if (isRootShortcut) {
+            parent = '';
+        } else {
+            const parts = normalized.split('/').filter(Boolean);
+            parts.pop();
+            parent = parts.length ? '/' + parts.join('/') : '';
+        }
+
+        return { path: normalized, parent, entries };
+    }
+
     // Public API — the page scripts call these instead of fetch() when in demo mode
     window.QuazaDemo = {
         isDemoMode,
@@ -104,6 +155,7 @@
         pkgCreate: mockPkgCreate,
         pkgProgress: mockPkgProgress,
         downloadUrl: mockDownloadUrl,
+        browse: mockBrowse,
         DEMO_OUTPUT_PATH,
     };
 

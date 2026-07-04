@@ -38,4 +38,9 @@ int pkg_header_finalize(pkg_context_t* ctx);
 int pkg_write_header(FILE* fp, pkg_context_t* ctx);
 void pkg_context_free(pkg_context_t* ctx);
 
+/* Top-level entry point implemented in pkg_builder.c — declared here (rather
+ * than left as an implicit/undeclared call) so callers like pkg_server.c
+ * get a real prototype and the compiler can catch signature mismatches. */
+int pkg_build(pkg_project_t* project, const char* input_dir, const char* output_path);
+
 #endif

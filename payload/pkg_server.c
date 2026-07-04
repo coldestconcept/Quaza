@@ -13,6 +13,7 @@
 #include <netinet/in.h>
 #include <pthread.h>
 #include <ctype.h>
+#include <dirent.h>
 
 #include "libprosperopkg/include/pkg_types.h"
 #include "libprosperopkg/include/pfs_builder.h"
@@ -365,6 +366,178 @@ void handle_sfo_parse(int fd, const char *dump_path) {
     http_json(fd, 200, "OK", json);
 }
 
+/* ── Directory browser (backs the web UI's folder-picker) ────────────── */
+
+/* Tiny growable string buffer — a directory listing's JSON can exceed a
+ * fixed-size stack buffer for game dumps with thousands of files. */
+typedef struct {
+    char  *buf;
+    size_t len;
+    size_t cap;
+} dstr_t;
+
+static void dstr_init(dstr_t *d) {
+    d->cap = 4096;
+    d->len = 0;
+    d->buf = malloc(d->cap);
+    if (d->buf) d->buf[0] = '\0';
+}
+
+static void dstr_append(dstr_t *d, const char *s) {
+    if (!d->buf) return;
+    size_t slen = strlen(s);
+    if (d->len + slen + 1 > d->cap) {
+        size_t new_cap = d->cap;
+        while (d->len + slen + 1 > new_cap) new_cap *= 2;
+        char *nb = realloc(d->buf, new_cap);
+        if (!nb) return;
+        d->buf = nb;
+        d->cap = new_cap;
+    }
+    memcpy(d->buf + d->len, s, slen + 1);
+    d->len += slen;
+}
+
+static void dstr_free(dstr_t *d) {
+    if (d->buf) free(d->buf);
+    d->buf = NULL;
+}
+
+/* Minimal JSON string escaper — handles quotes, backslashes and control
+ * characters so odd filenames can't break the response. */
+static void json_escape_append(dstr_t *d, const char *s) {
+    dstr_append(d, "\"");
+    char tmp[8];
+    for (const unsigned char *p = (const unsigned char *)s; *p; p++) {
+        if (*p == '"' || *p == '\\') {
+            tmp[0] = '\\'; tmp[1] = (char)*p; tmp[2] = '\0';
+            dstr_append(d, tmp);
+        } else if (*p < 0x20) {
+            snprintf(tmp, sizeof(tmp), "\\u%04x", *p);
+            dstr_append(d, tmp);
+        } else {
+            tmp[0] = (char)*p; tmp[1] = '\0';
+            dstr_append(d, tmp);
+        }
+    }
+    dstr_append(d, "\"");
+}
+
+/* Compute the parent directory of `path` into `out`. Returns an empty
+ * string when `path` is already a filesystem root (nothing above it but
+ * the root-shortcut view). */
+static void compute_parent_path(const char *path, char *out, size_t out_size) {
+    if (!path || path[0] == '\0') {
+        out[0] = '\0';
+        return;
+    }
+    char tmp[1024];
+    strncpy(tmp, path, sizeof(tmp) - 1);
+    tmp[sizeof(tmp) - 1] = '\0';
+
+    size_t len = strlen(tmp);
+    while (len > 1 && tmp[len - 1] == '/') { tmp[--len] = '\0'; }
+
+    char *slash = strrchr(tmp, '/');
+    if (!slash) {
+        out[0] = '\0'; /* no more path separators — go back to root shortcuts */
+    } else if (slash == tmp) {
+        strncpy(out, "/", out_size - 1);
+        out[out_size - 1] = '\0';
+    } else {
+        *slash = '\0';
+        strncpy(out, tmp, out_size - 1);
+        out[out_size - 1] = '\0';
+    }
+}
+
+/* Common PS5 mount points shown as the folder picker's "Home" view. Only
+ * the ones that actually exist on this console are returned to the UI. */
+static const char *BROWSE_ROOT_SHORTCUTS[] = {
+    "/mnt/usb0",
+    "/mnt/usb1",
+    "/mnt/ext0",
+    "/mnt/ext1",
+    "/mnt/sandbox",
+    "/data",
+    "/system_data",
+    NULL
+};
+
+void handle_browse(int fd, const char *path) {
+    dstr_t d;
+    dstr_init(&d);
+    if (!d.buf) {
+        http_json(fd, 500, "Internal Server Error", "{\"error\":\"Out of memory\"}");
+        return;
+    }
+
+    if (!path || path[0] == '\0') {
+        /* Root view: fixed shortcuts to the common external/internal mounts. */
+        dstr_append(&d, "{\"path\":\"\",\"parent\":null,\"entries\":[");
+        int first = 1;
+        for (int i = 0; BROWSE_ROOT_SHORTCUTS[i]; i++) {
+            struct stat st;
+            if (stat(BROWSE_ROOT_SHORTCUTS[i], &st) < 0 || !S_ISDIR(st.st_mode))
+                continue;
+            if (!first) dstr_append(&d, ",");
+            first = 0;
+            dstr_append(&d, "{\"name\":");
+            json_escape_append(&d, BROWSE_ROOT_SHORTCUTS[i]);
+            dstr_append(&d, ",\"type\":\"dir\"}");
+        }
+        dstr_append(&d, "]}");
+        http_json(fd, 200, "OK", d.buf);
+        dstr_free(&d);
+        return;
+    }
+
+    DIR *dir = opendir(path);
+    if (!dir) {
+        dstr_free(&d);
+        http_json(fd, 404, "Not Found", "{\"error\":\"Cannot open directory\"}");
+        return;
+    }
+
+    char parent[1024];
+    compute_parent_path(path, parent, sizeof(parent));
+
+    dstr_append(&d, "{\"path\":");
+    json_escape_append(&d, path);
+    dstr_append(&d, ",\"parent\":");
+    if (parent[0] == '\0') {
+        dstr_append(&d, "\"\"");
+    } else {
+        json_escape_append(&d, parent);
+    }
+    dstr_append(&d, ",\"entries\":[");
+
+    struct dirent *entry;
+    int first = 1;
+    while ((entry = readdir(dir)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+
+        char full[1200];
+        snprintf(full, sizeof(full), "%s/%s", path, entry->d_name);
+        struct stat st;
+        if (stat(full, &st) < 0) continue;
+
+        if (!first) dstr_append(&d, ",");
+        first = 0;
+        dstr_append(&d, "{\"name\":");
+        json_escape_append(&d, entry->d_name);
+        dstr_append(&d, ",\"type\":\"");
+        dstr_append(&d, S_ISDIR(st.st_mode) ? "dir" : "file");
+        dstr_append(&d, "\"}");
+    }
+    closedir(dir);
+
+    dstr_append(&d, "]}");
+    http_json(fd, 200, "OK", d.buf);
+    dstr_free(&d);
+}
+
 /* Serve embedded www files (offline mode — assets baked into the ELF) */
 void handle_static(int fd, const char *url_path) {
     /* normalise: "/" → "/index.html" */
@@ -419,6 +592,10 @@ static void handle_connection(int fd) {
     } else if (strcmp(req.path, PKG_API_SFO_PARSE) == 0) {
         qs_get(req.query, "path", param_path, sizeof(param_path));
         handle_sfo_parse(fd, param_path);
+
+    } else if (strcmp(req.path, PKG_API_BROWSE) == 0) {
+        qs_get(req.query, "path", param_path, sizeof(param_path));
+        handle_browse(fd, param_path);
 
     } else {
         /* Serve embedded static asset */

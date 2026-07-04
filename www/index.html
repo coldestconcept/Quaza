@@ -124,6 +124,187 @@
             margin-top: 4px;
         }
 
+        /* ── Path field + browse button ── */
+        .path-row {
+            display: flex;
+            gap: 8px;
+        }
+        .path-row input[type="text"] { flex: 1; min-width: 0; }
+        .browse-btn {
+            flex-shrink: 0;
+            width: 42px;
+            height: 42px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.55);
+            border: 1.5px solid rgba(255,255,255,0.8);
+            border-radius: 12px;
+            color: #1a7fa0;
+            cursor: pointer;
+            backdrop-filter: blur(6px);
+            transition: background 0.15s, transform 0.1s, border-color 0.15s;
+        }
+        .browse-btn:hover {
+            background: rgba(94, 207, 238, 0.28);
+            border-color: rgba(94, 207, 238, 0.9);
+        }
+        .browse-btn:active { transform: scale(0.94); }
+
+        /* ── Folder browser modal ── */
+        .browser-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 35, 50, 0.45);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+        .browser-overlay.open { display: flex; }
+        .browser-modal {
+            width: 100%;
+            max-width: 460px;
+            max-height: 78vh;
+            display: flex;
+            flex-direction: column;
+            background: rgba(235, 250, 255, 0.92);
+            backdrop-filter: blur(20px) saturate(160%);
+            border-radius: 20px;
+            border: 1.5px solid rgba(255, 255, 255, 0.8);
+            box-shadow: 0 20px 60px rgba(20, 60, 90, 0.35);
+            overflow: hidden;
+        }
+        .browser-modal-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 14px 16px;
+            border-bottom: 1px solid rgba(45, 120, 150, 0.15);
+            background: rgba(255,255,255,0.35);
+        }
+        .browser-up-btn, .browser-close-btn {
+            flex-shrink: 0;
+            width: 32px;
+            height: 32px;
+            border: none;
+            border-radius: 9px;
+            background: rgba(255,255,255,0.6);
+            color: #1a4a6e;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.95rem;
+            transition: background 0.15s;
+        }
+        .browser-up-btn:hover:not(:disabled), .browser-close-btn:hover { background: rgba(94, 207, 238, 0.35); }
+        .browser-up-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+        .browser-breadcrumb {
+            flex: 1;
+            min-width: 0;
+            font-family: monospace;
+            font-size: 0.82rem;
+            color: #1a3a52;
+            white-space: nowrap;
+            overflow-x: auto;
+            font-weight: 600;
+        }
+        .browser-modal-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 6px;
+            min-height: 220px;
+        }
+        .browser-loading, .browser-empty {
+            padding: 2rem 1rem;
+            text-align: center;
+            color: #4a8aaa;
+            font-size: 0.85rem;
+        }
+        .browser-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.12s;
+        }
+        .browser-row:hover { background: rgba(94, 207, 238, 0.18); }
+        .browser-row.selected {
+            background: rgba(45, 200, 239, 0.32);
+            box-shadow: inset 0 0 0 1.5px rgba(26, 127, 160, 0.6);
+        }
+        .browser-row.disabled {
+            opacity: 0.5;
+            cursor: default;
+        }
+        .browser-row.disabled:hover { background: transparent; }
+        .browser-row-icon {
+            flex-shrink: 0;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #2e8fb0;
+        }
+        .browser-row-icon.file { color: #7ab5cc; }
+        .browser-row-name {
+            flex: 1;
+            min-width: 0;
+            font-size: 0.88rem;
+            color: #1a3a52;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .browser-row-chevron {
+            flex-shrink: 0;
+            color: #7ab5cc;
+            font-size: 0.75rem;
+        }
+        .browser-modal-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 12px 16px;
+            border-top: 1px solid rgba(45, 120, 150, 0.15);
+            background: rgba(255,255,255,0.35);
+        }
+        .browser-selected-path {
+            flex: 1;
+            min-width: 0;
+            font-family: monospace;
+            font-size: 0.75rem;
+            color: #2e6080;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .browser-footer-actions {
+            display: flex;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+        .browser-footer-actions .btn {
+            width: auto;
+            padding: 9px 16px;
+            font-size: 0.85rem;
+            border-radius: 10px;
+        }
+        .browser-cancel-btn {
+            background: rgba(255,255,255,0.6) !important;
+            color: #1a4a6e !important;
+            box-shadow: none !important;
+        }
+        .browser-select-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
         /* ── Checkbox ── */
         .check-row {
             display: flex;
@@ -239,7 +420,14 @@
 
     <div class="field">
         <label for="dumpPath">Decrypted Title Directory Path</label>
-        <input type="text" id="dumpPath" placeholder="/mnt/usb0/CUSA00000-app">
+        <div class="path-row">
+            <input type="text" id="dumpPath" placeholder="/mnt/usb0/CUSA00000-app">
+            <button type="button" class="browse-btn" id="browseBtn" title="Browse for folder" aria-label="Browse for folder">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3 6.5C3 5.67157 3.67157 5 4.5 5H9.17157C9.5891 5 10.0335 5.17851 10.3336 5.49881L11.5 7H19.5C20.3284 7 21 7.67157 21 8.5V17.5C21 18.3284 20.3284 19 19.5 19H4.5C3.67157 19 3 18.3284 3 17.5V6.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                </svg>
+            </button>
+        </div>
     </div>
 
     <div class="field">
@@ -268,8 +456,33 @@
     </div>
 </div>
 
+<div class="browser-overlay" id="browserOverlay">
+    <div class="browser-modal">
+        <div class="browser-modal-header">
+            <button type="button" class="browser-up-btn" id="browserUpBtn" title="Up one level" aria-label="Up one level">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 19V5M12 5L6 11M12 5L18 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
+            <div class="browser-breadcrumb" id="browserBreadcrumb">Storage Devices</div>
+            <button type="button" class="browser-close-btn" id="browserCloseBtn" aria-label="Close">✕</button>
+        </div>
+        <div class="browser-modal-body" id="browserList">
+            <div class="browser-loading">Loading…</div>
+        </div>
+        <div class="browser-modal-footer">
+            <span class="browser-selected-path" id="browserSelectedLabel"></span>
+            <div class="browser-footer-actions">
+                <button type="button" class="btn browser-cancel-btn" id="browserCancelBtn">Cancel</button>
+                <button type="button" class="btn browser-select-btn" id="browserSelectBtn" disabled>Select Folder</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="js/snow.js"></script>
 <script src="js/demo.js"></script>
+<script src="js/browser.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
