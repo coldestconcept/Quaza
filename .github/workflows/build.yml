@@ -40,12 +40,16 @@ jobs:
 
     - name: Configure and Execute Toolchain Wrapper Cross-Compilation
       run: |
-        # Fixed: Dynamically sweeps and registers the exact toolchain and target system paths on the server
+        # Auto-detect exact toolchain pathways recursively inside CI
         REAL_TOOLCHAIN=$(find $GITHUB_WORKSPACE/target-sdk -name "prospero.cmake" -type f | head -n 1)
+        SDK_BASE_DIR=$(dirname $(dirname "$REAL_TOOLCHAIN"))
         REAL_TARGET_DIR=$(find $GITHUB_WORKSPACE/target-sdk -name "target" -type d | head -n 1)
         if [ -z "$REAL_TARGET_DIR" ]; then
             REAL_TARGET_DIR="$GITHUB_WORKSPACE/target-sdk"
         fi
+        
+        # Inject the mandatory environment variable required by CMakeLists.txt line 9
+        export PS5_PAYLOAD_SDK="$SDK_BASE_DIR"
         
         cd main-repo/payload
         mkdir -p build && cd build
