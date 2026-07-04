@@ -60,6 +60,8 @@ include_directories(
     # kstuff-lite headers (from the PS5 Payload SDK — NOT bundled with Quaza;
     # kstuff must already be running in the system before the ELF is injected)
 link_directories(
+    "${PS5_SDK}/target/lib"
+    "${PS5_SDK}/target/lib/kstuff_stub"
     ${PS5_SDK}/lib
     ${PS5_SDK}/lib/kstuff_stub
     "${PS5_SDK}/lib/ps5-payload-sdk"

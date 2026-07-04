@@ -19,7 +19,7 @@ jobs:
     - name: Setup Python Environment
       uses: actions/setup-python@v5
       with:
-        python-level: '3.x'
+        python-version: '3.x'
 
     - name: Set up PS5 Payload SDK Toolchain
       run: |
@@ -32,13 +32,16 @@ jobs:
 
     - name: Run Embedded Asset Generation Scripts
       run: |
-        python3 payload/tools/gen_embed.py || true
-        python3 payload/tools/gen_param_sfo.py payload/sce_sys/param_sfo_config.json param.sfo || true
+        cd payload
+        python3 tools/gen_embed.py || true
+        if [ -f "sce_sys/param_sfo_config.json" ]; then
+            python3 tools/gen_param_sfo.py sce_sys/param_sfo_config.json param.sfo || true
+        fi
 
     - name: Configure and Execute CMake Cross-Compilation
       run: |
         cd payload
-        mkdir build && cd build
+        mkdir -p build && cd build
         cmake -DCMAKE_TOOLCHAIN_FILE="${{ env.PS5_PAYLOAD_SDK }}/toolchain/prospero.cmake" -DCMAKE_C_COMPILER_WORKS=1 ..
         cmake --build .
 
