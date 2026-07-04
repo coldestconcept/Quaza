@@ -4,6 +4,8 @@
 #include <signal.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 
 #include "pkg_server.h"
 #include "browser_launch.h"
@@ -54,8 +56,43 @@ static void *install_thread(void *arg) {
     return NULL;
 }
 
+/* ── USB log redirect ────────────────────────────────────────────────────
+ * Opens quaza.log on the first USB drive found, then dup2()'s stdout and
+ * stderr to it.  All printf/fprintf calls everywhere automatically log.
+ * Returns the log path used, or NULL if no USB is mounted.
+ */
+static const char *usb_log_init(void) {
+    static const char *candidates[] = {
+        "/mnt/usb0/quaza.log",
+        "/mnt/usb1/quaza.log",
+        "/data/quaza/quaza.log",   /* fallback: internal writable dir */
+        NULL
+    };
+
+    for (int i = 0; candidates[i]; i++) {
+        int fd = open(candidates[i],
+                      O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (fd < 0) continue;
+
+        /* Redirect stdout and stderr to the log file */
+        dup2(fd, STDOUT_FILENO);
+        dup2(fd, STDERR_FILENO);
+        close(fd);
+
+        /* Write header so we can confirm the file is ours */
+        printf("=== Quaza log — started ===\n");
+        printf("Log path: %s\n\n", candidates[i]);
+        fflush(stdout);
+        return candidates[i];
+    }
+    return NULL;   /* no writable path found — output goes to elfldr only */
+}
+
 int main(int argc, char **argv) {
     (void)argc; (void)argv;
+
+    /* ── 0. USB log — do this before ANYTHING else ───────────────────── */
+    usb_log_init();
 
     signal(SIGINT,  signal_handler);
     signal(SIGTERM, signal_handler);
