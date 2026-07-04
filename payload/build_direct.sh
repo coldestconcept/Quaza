@@ -52,28 +52,45 @@ fix_stub() {
 }
 
 echo "==> [0/3] Rebuilding stubs..."
+# Library layout verified against pldmgr, game-compressor, elf-arsenal:
+#   ALL three have: libkernel_web.sprx + libSceNet.sprx + libSceLibcInternal.sprx
+#   elf-arsenal also adds libkernel_sys.sprx (we do too for sceKernel* funcs)
+#   NONE have libSceSysmodule.sprx — excluded
 
-# libkernel_sys.sprx  — POSIX I/O, sockets, pthreads, sceKernel*
-# PS5 does NOT have a bare libkernel.sprx; firmware ships libkernel_sys.sprx
-# and libkernel_web.sprx.  ELF Arsenal (known-good) uses libkernel_sys.sprx.
+# libkernel_sys.sprx — sceKernel* notification/info + POSIX fd I/O + pthreads + dir
 fix_stub libkernel_sys.sprx libkernel_sys.so \
   open close read write lseek dup dup2 \
   stat fstat lstat mkdir rmdir unlink rename chmod fchmod access \
   getpid geteuid getuid gettimeofday clock_gettime \
-  getifaddrs freeifaddrs \
-  socket connect bind listen accept send recv sendto recvfrom \
-  setsockopt getsockopt getsockname getpeername \
+  usleep sleep time signal \
+  opendir readdir closedir \
   pthread_create pthread_join pthread_detach pthread_exit \
   pthread_mutex_init pthread_mutex_lock pthread_mutex_unlock pthread_mutex_destroy \
   pthread_cond_init pthread_cond_wait pthread_cond_signal \
   pthread_cond_broadcast pthread_cond_destroy \
   pthread_self pthread_attr_init pthread_attr_destroy pthread_attr_setstacksize \
-  usleep sleep time \
-  signal \
-  opendir readdir closedir \
   sceKernelSendNotificationRequest sceKernelGetAppInfo sceKernelUsleep
 
-# libSceLibcInternal.sprx  — libc (stdio, string, memory, ctype, stdlib)
+# libkernel_web.sprx — present in ALL three reference payloads
+fix_stub libkernel_web.sprx libkernel_web.so \
+  sceKernelSendNotificationRequest sceKernelGetAppInfo sceKernelUsleep \
+  open close read write lseek dup dup2 \
+  stat fstat lstat mkdir rmdir unlink rename chmod fchmod access \
+  getpid gettimeofday clock_gettime usleep sleep time signal \
+  opendir readdir closedir \
+  pthread_create pthread_join pthread_detach pthread_exit \
+  pthread_mutex_init pthread_mutex_lock pthread_mutex_unlock pthread_mutex_destroy \
+  pthread_cond_init pthread_cond_wait pthread_cond_signal \
+  pthread_cond_broadcast pthread_cond_destroy \
+  pthread_self pthread_attr_init pthread_attr_destroy pthread_attr_setstacksize
+
+# libSceNet.sprx — sockets + network interfaces; present in ALL three reference payloads
+fix_stub libSceNet.sprx libSceNet.so \
+  socket connect bind listen accept send recv sendto recvfrom \
+  setsockopt getsockopt getsockname getpeername \
+  getifaddrs freeifaddrs
+
+# libSceLibcInternal.sprx — full libc; present in ALL three reference payloads
 fix_stub libSceLibcInternal.sprx libSceLibcInternal.so \
   printf fprintf snprintf sprintf vfprintf vprintf vsnprintf \
   puts fputs fputc fgetc fgets fflush \
@@ -97,21 +114,15 @@ fix_stub libSceLibcInternal.sprx libSceLibcInternal.so \
 fix_stub libSceUserService.sprx libSceUserService.so \
   sceUserServiceInitialize sceUserServiceFinalize sceUserServiceGetForegroundUser
 
-# libSceSystemService.sprx  (was .so — SONAME was wrong)
+# libSceSystemService.sprx
 fix_stub libSceSystemService.sprx libSceSystemService.so \
   sceSystemServiceInitialize sceSystemServiceLaunchApp \
   sceSystemServiceLaunchWebBrowser sceSystemServiceParamGetString
 
-# libSceAppInstUtil.sprx  (was .so — SONAME was wrong)
+# libSceAppInstUtil.sprx
 fix_stub libSceAppInstUtil.sprx libSceAppInstUtil.so \
   sceAppInstUtilInitialize sceAppInstUtilAppInstallPkg \
   sceAppInstUtilAppRecover sceAppInstUtilAppUnInstall sceAppInstUtilGetAppInfo
-
-# libSceSysmodule.sprx  — keep SDK original if it exists, else make a stub
-if ! readelf -d "$SDK_STUBS/libSceSysmodule.so" 2>/dev/null | grep -q 'libSceSysmodule.sprx'; then
-  fix_stub libSceSysmodule.sprx libSceSysmodule.so \
-    sceSysmoduleLoadModule sceSysmoduleUnloadModule sceSysmoduleIsLoaded
-fi
 
 # =============================================================================
 # [1/3] Compile
@@ -148,11 +159,12 @@ $LDLLD -m elf_x86_64 \
   "$SDK_CRT/crt1.o" \
   $OBJS \
   -lkernel_sys \
+  -lkernel_web \
+  -lSceNet \
   -lSceLibcInternal \
-  -lSceAppInstUtil \
-  -lSceSystemService \
   -lSceUserService \
-  -lSceSysmodule \
+  -lSceSystemService \
+  -lSceAppInstUtil \
   --allow-shlib-undefined \
   -o "$BUILD/quaza_payload.elf"
 
