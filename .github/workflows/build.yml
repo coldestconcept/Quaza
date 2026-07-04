@@ -17,17 +17,18 @@ jobs:
         path: main-repo
         submodules: recursive
 
-    - name: Deploy Firewall-Insulated Cross-Compiler Tools
+    - name: Fetch SDK Framework via Authenticated Internal Submodule API
+      # Fixed: Uses GitHub's official native module to fetch the SDK properties securely via internal backend networks
+      uses: actions/checkout@v4
+      with:
+        repository: ps5-payload-dev/sdk
+        path: target-sdk
+        ref: master
+
+    - name: Deploy Core Cross-Compiler Tools
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake make python3 clang-15 lld-15 curl tar
-        
-        # Fixed: Pulls a raw source snapshot tarball to completely bypass GitHub's binary zip firewalls
-        mkdir -p $GITHUB_WORKSPACE/target-sdk
-        curl -L "https://github.com" -o sdk.tar.gz
-        tar -xzf sdk.tar.gz -C $GITHUB_WORKSPACE/target-sdk --strip-components=1
-        rm sdk.tar.gz
-        
+        sudo apt-get install -y cmake make python3 clang-15 lld-15
         echo "PS5_PAYLOAD_SDK=$GITHUB_WORKSPACE/target-sdk" >> $GITHUB_ENV
 
     - name: Safeguard Asset Embedding Headers
@@ -42,18 +43,31 @@ jobs:
 
     - name: Configure and Execute Toolchain Wrapper Cross-Compilation
       run: |
+        # Auto-detect toolchain blueprints recursively inside the internally synced repository tree
+        REAL_TOOLCHAIN=$(find $GITHUB_WORKSPACE/target-sdk -name "prospero.cmake" -type f | head -n 1)
+        SDK_BASE_DIR=$(dirname $(dirname "$REAL_TOOLCHAIN"))
+        
+        # Build comprehensive internal recursive maps for your compiler structures
+        ALL_INCLUDES=""
+        for inc_dir in $(find $GITHUB_WORKSPACE/target-sdk -name "include" -type d -o -name "include_common" -type d); do
+            ALL_INCLUDES="$ALL_INCLUDES -I$inc_dir"
+        done
+        
+        STDIO_PATH=$(find $GITHUB_WORKSPACE/target-sdk -name "stdio.h" -type f | head -n 1)
+        if [ ! -z "$STDIO_PATH" ]; then
+            ALL_INCLUDES="$ALL_INCLUDES -I$(dirname "$STDIO_PATH")"
+        fi
+        
+        export PS5_PAYLOAD_SDK="$SDK_BASE_DIR"
+        
         cd main-repo/payload
         mkdir -p build && cd build
-        
-        REAL_TOOLCHAIN="${{ env.PS5_PAYLOAD_SDK }}/toolchain/prospero.cmake"
-        SDK_TARGET_DIR="${{ env.PS5_PAYLOAD_SDK }}/target"
-        
         cmake -DCMAKE_MAKE_PROGRAM=/usr/bin/make \
               -DCMAKE_C_COMPILER=/usr/bin/clang-15 \
               -DCMAKE_TOOLCHAIN_FILE="$REAL_TOOLCHAIN" \
               -DCMAKE_C_COMPILER_WORKS=1 \
-              -DCMAKE_C_FLAGS="-I${SDK_TARGET_DIR}/include -I${SDK_TARGET_DIR}/include_common" \
-              -DSDK_PATH="$SDK_TARGET_DIR" ..
+              -DCMAKE_C_FLAGS="$ALL_INCLUDES" \
+              -DSDK_PATH="$SDK_BASE_DIR" ..
         cmake --build .
 
     - name: Upload Completed Production Packages
