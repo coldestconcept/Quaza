@@ -1,0 +1,67 @@
+Let me look at the codebase and research all three questions in parallel before answering.
+
+
+4 actions
+Good questions — and the research gives me enough to give you an honest answer rather than just building blindly. Let me break this down:
+
+1. Will the PKG converter actually work right now?
+No — there's a blocking bug. The code in pkg_server.c calls:
+
+pkg_build(path, content_id, output_path, &progress, &mutex)  // 5 args
+
+But pkg_builder.c only accepts:
+
+int pkg_build(project, input_dir, output_path)  // 3 args
+
+The call will either fail to compile or crash at runtime. Separately, the PFS directory scanner loads entire game files into RAM (malloc(file_size)) — fine for small homebrews, will run out of memory on a 50 GB game dump.
+
+Both are fixable and I can do that now.
+
+2. ShadowMount Plus — I need to clarify with you
+What is ShadowMount Plus in this context?
+What is ShadowMount Plus?
+It's a separate PS5 homebrew tool (by another developer) that I already use
+Additional comments
+It detects the games on internet or external drives, and allows them to be played, https://github.com/drakmor/shadowMountPlus
+Arksama's native A53 package system — what is this?
+It's an install method (native ARM-side install, bypassing the main x86 flow)
+Additional comments
+It is a way to utilize the a53 chip on the ps5 to run the game natively without extra emulation bogging it down
+Should I fix the PKG converter bugs (signature mismatch + memory) while you answer?
+Yes
+Additional comments
+Yes
+
+Worked for 1 minute
+Investigating ShadowMount Plus
+
+Investigating ShadowMount Plus
+On it — researching ShadowMount Plus's API and fixing the PKG bugs in parallel.
+
+
+4 actions
+Now I have everything needed. Let me fix the PKG bugs and research ShadowMount Plus's actual repo in parallel.
+
+
+6 actions
+Now I have everything. The bug fix is clear — fix the pkg_project_t construction and call the right signature. Let me read pfs_directory.c for the memory issue, then fix everything in parallel.
+
+
+7 actions
+Now I have everything. Making all fixes in parallel — signature mismatch, streaming I/O for large games, auto-install after conversion, and ShadowMount Plus notification hook.
+
+
+4 actions
+Now fix pfs_builder.c (streaming write + remove the huge data_blocks alloc) and pkg_server.c (signature fix + auto-install + ShadowMount notify) in parallel.
+
+
+4 actions
+Now I need to add the auto-install trigger and ShadowMount Plus notification after a successful build. Let me read the completion section of pkg_server.c and also add a dedicated pkg_install.c for the post-build hooks.
+
+
+2 actions
+Now adding the auto-install + ShadowMount Plus notification. Writing pkg_install.h, pkg_install.c, and wiring them into the success path of pkg_server.c.
+
+
+3 actions
+Now wire the auto-install call into pkg_server.c's success path and update CMakeLists.txt — both in parallel.
