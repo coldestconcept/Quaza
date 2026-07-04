@@ -23,6 +23,12 @@ jobs:
         repository: ps5-payload-dev/sdk
         path: target-sdk
 
+    - name: Checkout Pre-Compiled Native Library Stubs via API
+      uses: actions/checkout@v4
+      with:
+        repository: ps5-payload-dev/apt
+        path: apt-repo
+
     - name: Deploy Core Cross-Compiler Tools
       run: |
         sudo apt-get update
@@ -48,7 +54,9 @@ jobs:
             REAL_TARGET_DIR="$GITHUB_WORKSPACE/target-sdk"
         fi
         
-        # Fixed: Explicitly locate stdio.h anywhere in the workspace or fall back to native include locations
+        # Deploy pre-compiled binary stub paths to the linker flag sweeps
+        STUB_LIBS=$(find $GITHUB_WORKSPACE/apt-repo -name "*.a" -exec dirname {} \; | sort -u | sed 's/^/-L/')
+        
         STDIO_PATH=$(find $GITHUB_WORKSPACE -name "stdio.h" -type f | head -n 1)
         if [ ! -z "$STDIO_PATH" ]; then
             EXTRA_INC="-I$(dirname "$STDIO_PATH")"
@@ -65,6 +73,7 @@ jobs:
               -DCMAKE_TOOLCHAIN_FILE="$REAL_TOOLCHAIN" \
               -DCMAKE_C_COMPILER_WORKS=1 \
               -DCMAKE_C_FLAGS="$EXTRA_INC" \
+              -DCMAKE_EXE_LINKER_FLAGS="$STUB_LIBS" \
               -DSDK_PATH="$REAL_TARGET_DIR" ..
         cmake --build .
 
