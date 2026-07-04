@@ -16,6 +16,7 @@ pfs_inode_t* pfs_inode_create(const char* name, int type, pfs_inode_t* parent) {
     inode->children = NULL;
     inode->child_count = 0;
     inode->data = NULL;
+    inode->src_path = NULL;
     
     // Set mode based on type
     if (type == PFS_INODE_TYPE_DIR) {
@@ -32,6 +33,7 @@ void pfs_inode_free(pfs_inode_t* inode) {
     
     if (inode->name) free(inode->name);
     if (inode->data) free(inode->data);
+    if (inode->src_path) free(inode->src_path);
     
     // Free children recursively
     for (int i = 0; i < inode->child_count; i++) {

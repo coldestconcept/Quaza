@@ -152,6 +152,7 @@ typedef struct pfs_inode {
     uint64_t ino;
     char* name;
     void* data;
+    char* src_path;
     struct pfs_inode* parent;
     struct pfs_inode** children;
     int child_count;

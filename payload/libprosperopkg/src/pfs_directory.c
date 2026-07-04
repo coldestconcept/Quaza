@@ -46,19 +46,14 @@ int pfs_scan_directory(const char* path, pfs_inode_t* parent) {
                                                        parent);
             if (file_inode) {
                 file_inode->size = st.st_size;
-                
-                // Read file data
-                if (st.st_size > 0) {
-                    file_inode->data = malloc(st.st_size);
-                    if (file_inode->data) {
-                        FILE* fp = fopen(full_path, "rb");
-                        if (fp) {
-                            fread(file_inode->data, 1, st.st_size, fp);
-                            fclose(fp);
-                        }
-                    }
-                }
-                
+
+                /* Streamed I/O: only remember the source path on disk.
+                 * The actual bytes are copied straight from this file into
+                 * the output PKG during pfs_write_image(), in fixed-size
+                 * chunks, so we never hold a whole game file (which can be
+                 * many GB) in RAM at once. */
+                file_inode->src_path = strdup(full_path);
+
                 pfs_inode_add_child(parent, file_inode);
             }
         }

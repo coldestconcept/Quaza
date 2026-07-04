@@ -94,13 +94,13 @@ int pfs_build_image(pfs_image_t* image) {
     uint64_t current_offset = image->data_offset;
     assign_offsets(image->root, &current_offset, image->block_size);
     
-    // Allocate data blocks
-    uint64_t data_size = current_offset - image->data_offset;
-    image->data_blocks = calloc(1, data_size);
-    if (!image->data_blocks) return -1;
-    
-    // Copy file data to blocks
-    // (This would be done during write)
+    /* NOTE: file data is streamed directly from each source file into the
+     * output PKG during pfs_write_image() (see write_file_data()), so we
+     * intentionally do NOT allocate a data_blocks buffer here. A single
+     * game dump can be tens or hundreds of GB; buffering it all in RAM
+     * (on top of the source file already being read) would exhaust memory
+     * on the PS5. image->data_blocks stays NULL and is unused by design. */
+    (void)current_offset;
     
     return 0;
 }
@@ -144,24 +144,77 @@ static void write_inodes_recursive(FILE* fp, pfs_inode_t* node, uint64_t block_s
     }
 }
 
-static void write_file_data(FILE* fp, pfs_inode_t* node, uint64_t block_size) {
-    if (!node) return;
-    
-    if (node->type == PFS_INODE_TYPE_FILE && node->size > 0 && node->data) {
+#define PFS_STREAM_CHUNK_SIZE (4 * 1024 * 1024) /* 4MB copy buffer */
+
+static int stream_copy_file(FILE* out_fp, const char* src_path, uint64_t size) {
+    FILE* in_fp = fopen(src_path, "rb");
+    if (!in_fp) {
+        perror("[PFS] fopen source");
+        return -1;
+    }
+
+    uint8_t* buf = malloc(PFS_STREAM_CHUNK_SIZE);
+    if (!buf) {
+        fclose(in_fp);
+        return -1;
+    }
+
+    uint64_t remaining = size;
+    int rc = 0;
+    while (remaining > 0) {
+        size_t chunk = remaining < PFS_STREAM_CHUNK_SIZE ? (size_t)remaining : PFS_STREAM_CHUNK_SIZE;
+        size_t got = fread(buf, 1, chunk, in_fp);
+        if (got == 0) {
+            fprintf(stderr, "[PFS] short read on %s\n", src_path);
+            rc = -1;
+            break;
+        }
+        if (fwrite(buf, 1, got, out_fp) != got) {
+            perror("[PFS] fwrite");
+            rc = -1;
+            break;
+        }
+        remaining -= got;
+    }
+
+    free(buf);
+    fclose(in_fp);
+    return rc;
+}
+
+static int write_file_data(FILE* fp, pfs_inode_t* node, uint64_t block_size) {
+    if (!node) return 0;
+
+    if (node->type == PFS_INODE_TYPE_FILE && node->size > 0 && node->src_path) {
         fseek(fp, node->offset, SEEK_SET);
-        fwrite(node->data, 1, node->size, fp);
-        
-        // Pad to block boundary
+
+        if (stream_copy_file(fp, node->src_path, node->size) < 0) {
+            return -1;
+        }
+
+        // Pad to block boundary in bulk (avoid a fwrite() call per byte)
         uint64_t padded = align_up(node->size, block_size);
-        uint8_t zero = 0;
-        for (uint64_t i = node->size; i < padded; i++) {
-            fwrite(&zero, 1, 1, fp);
+        uint64_t pad_bytes = padded - node->size;
+        if (pad_bytes > 0) {
+            static const uint8_t zero_buf[4096] = {0};
+            while (pad_bytes > 0) {
+                size_t chunk = pad_bytes < sizeof(zero_buf) ? (size_t)pad_bytes : sizeof(zero_buf);
+                if (fwrite(zero_buf, 1, chunk, fp) != chunk) {
+                    perror("[PFS] fwrite pad");
+                    return -1;
+                }
+                pad_bytes -= chunk;
+            }
         }
     }
-    
+
     for (int i = 0; i < node->child_count; i++) {
-        write_file_data(fp, node->children[i], block_size);
+        if (write_file_data(fp, node->children[i], block_size) < 0) {
+            return -1;
+        }
     }
+
+    return 0;
 }
 
 int pfs_write_image(pfs_image_t* image, FILE* fp) {
@@ -187,9 +240,12 @@ int pfs_write_image(pfs_image_t* image, FILE* fp) {
         free(bitmap);
     }
     
-    // Write file data
+    // Write file data (streamed straight from each source file on disk)
     fseek(fp, image->data_offset, SEEK_SET);
-    write_file_data(fp, image->root, image->block_size);
+    if (write_file_data(fp, image->root, image->block_size) < 0) {
+        fprintf(stderr, "[PFS] Failed to stream file data\n");
+        return -1;
+    }
     
     return 0;
 }
