@@ -62,6 +62,8 @@ include_directories(
     ${PS5_SDK}/include/kstuff
 )
 
+    ${PS5_SDK}/lib/ps5-payload-sdk
+    ${PS5_SDK}/ps5-payload-sdk/lib
 link_directories(
     ${PS5_SDK}/lib
     # No ${PS5_SDK}/lib/kstuff — we do NOT link kstuff statically.

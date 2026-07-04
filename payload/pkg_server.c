@@ -204,8 +204,7 @@ void *pkg_creation_thread(void *arg) {
     current_progress.progress_percent = 20;
     pthread_mutex_unlock(&progress_mutex);
 
-    int rc = pkg_build(args->path, args->content_id, output_path,
-                       &current_progress, &progress_mutex);
+    int rc = pkg_build(args->path, args->content_id, output_path);
 
     pthread_mutex_lock(&progress_mutex);
     if (rc == 0) {
