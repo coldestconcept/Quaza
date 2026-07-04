@@ -16,17 +16,20 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Set up PS5 Payload SDK Toolchain
+    - name: Install PS5 Payload SDK via Official Package Manager
       run: |
-        sudo apt-get update && sudo apt-get install -y wget unzip cmake make python3 curl
-        mkdir -p $HOME/target-sdk
-        # Fixed: Uses a direct, unredirected release archive link to ensure the full 8.4MB toolchain packages download correctly
-        curl -L "https://github.com" -o sdk.zip
-        unzip -o sdk.zip -d $HOME/target-sdk
-        rm sdk.zip
-        # Map the binary tools and standard definitions to the runner environment paths
-        echo "$HOME/target-sdk/ps5-payload-sdk/bin" >> $GITHUB_PATH
-        echo "PS5_PAYLOAD_SDK=$HOME/target-sdk/ps5-payload-sdk" >> $GITHUB_ENV
+        sudo apt-get update
+        sudo apt-get install -y curl gnupg cmake make python3
+        # 1. Trust and install the official developer distribution security key
+        curl -fsSL https://github.io | sudo gpg --dearmor -o /usr/share/keyrings/ps5-payload-dev.gpg
+        # 2. Add the official stable apt repository channel
+        echo "deb [signed-by=/usr/share/keyrings/ps5-payload-dev.gpg] https://github.io stable main" | sudo tee /etc/apt/sources.list.dist/ps5-payload-dev.list
+        # 3. Synchronize package maps and pull the complete native compiler tools
+        sudo apt-get update
+        sudo apt-get install -y ps5-payload-sdk
+        # 4. Export the correct configuration environment paths to the cloud runner
+        echo "PS5_PAYLOAD_SDK=/usr/share/ps5-payload-sdk" >> $GITHUB_ENV
+        echo "/usr/share/ps5-payload-sdk/bin" >> $GITHUB_PATH
 
     - name: Safeguard Asset Embedding Headers
       run: |
@@ -42,8 +45,8 @@ jobs:
       run: |
         cd payload
         mkdir -p build && cd build
-        # Run compilation using the native prospero-cmake variables mapped from the extracted tools directory
-        $HOME/target-sdk/ps5-payload-sdk/bin/prospero-cmake -DCMAKE_C_COMPILER_WORKS=1 ..
+        # Uses the globally registered prospero-cmake script installed from the package system
+        prospero-cmake -DCMAKE_C_COMPILER_WORKS=1 ..
         cmake --build .
 
     - name: Upload Completed Production Packages
