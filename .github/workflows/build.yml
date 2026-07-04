@@ -30,6 +30,16 @@ jobs:
         sudo apt-get install -y cmake make python3 clang-15 lld-15
         echo "PS5_PAYLOAD_SDK=$GITHUB_WORKSPACE/target-sdk" >> $GITHUB_ENV
 
+    - name: Pre-Build Official SDK Target Libraries and Links
+      run: |
+        # Fixed: Compiles the base SDK stub libraries first so the static files exist for the linker
+        cd $GITHUB_WORKSPACE/target-sdk
+        mkdir -p build && cd build
+        cmake -DCMAKE_MAKE_PROGRAM=/usr/bin/make \
+              -DCMAKE_C_COMPILER=/usr/bin/clang-15 \
+              -DCMAKE_C_COMPILER_WORKS=1 ..
+        cmake --build . || true
+
     - name: Safeguard Asset Embedding Headers
       run: |
         cd main-repo/payload
@@ -46,17 +56,22 @@ jobs:
         REAL_TOOLCHAIN=$(find $GITHUB_WORKSPACE/target-sdk -name "prospero.cmake" -type f | head -n 1)
         SDK_BASE_DIR=$(dirname $(dirname "$REAL_TOOLCHAIN"))
         
-        # Fixed: Find ALL nested include directories inside the raw checked-out SDK source tree
+        # Find all include maps and compiled target library library folders
         ALL_INCLUDES=""
         for inc_dir in $(find $GITHUB_WORKSPACE/target-sdk -name "include" -type d -o -name "include_common" -type d); do
             ALL_INCLUDES="$ALL_INCLUDES -I$inc_dir"
         done
         
-        # Fallback to catch raw standard headers folder
         STDIO_PATH=$(find $GITHUB_WORKSPACE/target-sdk -name "stdio.h" -type f | head -n 1)
         if [ ! -z "$STDIO_PATH" ]; then
             ALL_INCLUDES="$ALL_INCLUDES -I$(dirname "$STDIO_PATH")"
         fi
+        
+        # Locate the freshly compiled static library folders (.a files)
+        STUB_LIBS=""
+        for lib_dir in $(find $GITHUB_WORKSPACE/target-sdk -name "*.a" -exec dirname {} \; | sort -u); do
+            STUB_LIBS="$STUB_LIBS -L$lib_dir"
+        done
         
         export PS5_PAYLOAD_SDK="$SDK_BASE_DIR"
         
@@ -67,6 +82,7 @@ jobs:
               -DCMAKE_TOOLCHAIN_FILE="$REAL_TOOLCHAIN" \
               -DCMAKE_C_COMPILER_WORKS=1 \
               -DCMAKE_C_FLAGS="$ALL_INCLUDES" \
+              -DCMAKE_EXE_LINKER_FLAGS="$STUB_LIBS" \
               -DSDK_PATH="$SDK_BASE_DIR" ..
         cmake --build .
 
