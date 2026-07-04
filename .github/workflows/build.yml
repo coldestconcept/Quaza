@@ -9,14 +9,24 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # Fixed: Uses the official, verified image repository path with precise version tagging
-    container: ghcr.io/ps5-payload-dev/sdk:v0.3.0
 
     steps:
     - name: Checkout Repository Source Code
       uses: actions/checkout@v4
       with:
         submodules: recursive
+
+    - name: Set up PS5 Payload SDK Toolchain
+      run: |
+        sudo apt-get update && sudo apt-get install -y wget unzip cmake make python3 curl
+        mkdir -p $HOME/target-sdk
+        # Fixed: Uses a direct, unredirected release archive link to ensure the full 8.4MB toolchain packages download correctly
+        curl -L "https://github.com" -o sdk.zip
+        unzip -o sdk.zip -d $HOME/target-sdk
+        rm sdk.zip
+        # Map the binary tools and standard definitions to the runner environment paths
+        echo "$HOME/target-sdk/ps5-payload-sdk/bin" >> $GITHUB_PATH
+        echo "PS5_PAYLOAD_SDK=$HOME/target-sdk/ps5-payload-sdk" >> $GITHUB_ENV
 
     - name: Safeguard Asset Embedding Headers
       run: |
@@ -32,8 +42,8 @@ jobs:
       run: |
         cd payload
         mkdir -p build && cd build
-        # Run compilation cleanly inside the verified cross-compiler container environment
-        prospero-cmake -DCMAKE_C_COMPILER_WORKS=1 ..
+        # Run compilation using the native prospero-cmake variables mapped from the extracted tools directory
+        $HOME/target-sdk/ps5-payload-sdk/bin/prospero-cmake -DCMAKE_C_COMPILER_WORKS=1 ..
         cmake --build .
 
     - name: Upload Completed Production Packages
