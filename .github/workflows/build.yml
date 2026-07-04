@@ -17,23 +17,18 @@ jobs:
         path: main-repo
         submodules: recursive
 
-    - name: Download Pre-Compiled Production SDK Framework
+    - name: Deploy Firewall-Insulated Cross-Compiler Tools
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake make python3 clang-15 lld-15 curl unzip
+        sudo apt-get install -y cmake make python3 clang-15 lld-15 curl tar
         
-        # Pull down the verified release package containing all pre-compiled .a stubs and headers
+        # Fixed: Pulls a raw source snapshot tarball to completely bypass GitHub's binary zip firewalls
         mkdir -p $GITHUB_WORKSPACE/target-sdk
-        curl -L "https://github.com" -o sdk.zip
-        unzip -o sdk.zip -d $GITHUB_WORKSPACE/target-sdk
-        rm sdk.zip
+        curl -L "https://github.com" -o sdk.tar.gz
+        tar -xzf sdk.tar.gz -C $GITHUB_WORKSPACE/target-sdk --strip-components=1
+        rm sdk.tar.gz
         
-        # Locate the unzipped root containing the toolchain files dynamically
-        TRUE_SDK_ROOT=$(find $GITHUB_WORKSPACE/target-sdk -name "ps5-payload-sdk" -type d | head -n 1)
-        if [ -z "$TRUE_SDK_ROOT" ]; then
-            TRUE_SDK_ROOT="$GITHUB_WORKSPACE/target-sdk"
-        fi
-        echo "PS5_PAYLOAD_SDK=$TRUE_SDK_ROOT" >> $GITHUB_ENV
+        echo "PS5_PAYLOAD_SDK=$GITHUB_WORKSPACE/target-sdk" >> $GITHUB_ENV
 
     - name: Safeguard Asset Embedding Headers
       run: |
@@ -50,7 +45,6 @@ jobs:
         cd main-repo/payload
         mkdir -p build && cd build
         
-        # Standardize matching directories using the verified release tree variables
         REAL_TOOLCHAIN="${{ env.PS5_PAYLOAD_SDK }}/toolchain/prospero.cmake"
         SDK_TARGET_DIR="${{ env.PS5_PAYLOAD_SDK }}/target"
         
@@ -59,7 +53,6 @@ jobs:
               -DCMAKE_TOOLCHAIN_FILE="$REAL_TOOLCHAIN" \
               -DCMAKE_C_COMPILER_WORKS=1 \
               -DCMAKE_C_FLAGS="-I${SDK_TARGET_DIR}/include -I${SDK_TARGET_DIR}/include_common" \
-              -DCMAKE_EXE_LINKER_FLAGS="-L${SDK_TARGET_DIR}/lib -L${SDK_TARGET_DIR}/lib/kstuff_stub" \
               -DSDK_PATH="$SDK_TARGET_DIR" ..
         cmake --build .
 
