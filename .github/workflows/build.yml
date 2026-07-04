@@ -40,7 +40,7 @@ jobs:
 
     - name: Configure and Execute Toolchain Wrapper Cross-Compilation
       run: |
-        # Auto-detect exact toolchain pathways recursively inside CI
+        # Auto-detect toolchain blueprints recursively
         REAL_TOOLCHAIN=$(find $GITHUB_WORKSPACE/target-sdk -name "prospero.cmake" -type f | head -n 1)
         SDK_BASE_DIR=$(dirname $(dirname "$REAL_TOOLCHAIN"))
         REAL_TARGET_DIR=$(find $GITHUB_WORKSPACE/target-sdk -name "target" -type d | head -n 1)
@@ -48,7 +48,14 @@ jobs:
             REAL_TARGET_DIR="$GITHUB_WORKSPACE/target-sdk"
         fi
         
-        # Inject the mandatory environment variable required by CMakeLists.txt line 9
+        # Fixed: Explicitly locate stdio.h anywhere in the workspace or fall back to native include locations
+        STDIO_PATH=$(find $GITHUB_WORKSPACE -name "stdio.h" -type f | head -n 1)
+        if [ ! -z "$STDIO_PATH" ]; then
+            EXTRA_INC="-I$(dirname "$STDIO_PATH")"
+        else
+            EXTRA_INC="-I${REAL_TARGET_DIR}/include -I${REAL_TARGET_DIR}/include_common"
+        fi
+        
         export PS5_PAYLOAD_SDK="$SDK_BASE_DIR"
         
         cd main-repo/payload
@@ -57,6 +64,7 @@ jobs:
               -DCMAKE_C_COMPILER=/usr/bin/clang-15 \
               -DCMAKE_TOOLCHAIN_FILE="$REAL_TOOLCHAIN" \
               -DCMAKE_C_COMPILER_WORKS=1 \
+              -DCMAKE_C_FLAGS="$EXTRA_INC" \
               -DSDK_PATH="$REAL_TARGET_DIR" ..
         cmake --build .
 
