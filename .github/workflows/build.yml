@@ -16,9 +16,20 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Set up PS5 Payload SDK via Official Action
-      # Uses the developer organization's verified repository setup automation
-      uses: ps5-payload-dev/sdk/.github/actions/setup@master
+    - name: Set up PS5 Payload SDK via Official Toolchain Repository
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y curl gnupg cmake make python3
+        # 1. Manually fetch and establish the official key verification signature
+        curl -fsSL https://github.io | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/ps5-payload-dev.gpg
+        # 2. Bind the stable release distribution channel directly to your source lists
+        echo "deb https://github.io stable main" | sudo tee /etc/apt/sources.list.d/ps5-payload-dev.list
+        # 3. Force-synchronize systems and deploy the package variables
+        sudo apt-get update
+        sudo apt-get install -y ps5-payload-sdk
+        # 4. Map environmental tools directly to runner configuration frames
+        echo "PS5_PAYLOAD_SDK=/usr/share/ps5-payload-sdk" >> $GITHUB_ENV
+        echo "/usr/share/ps5-payload-sdk/bin" >> $GITHUB_PATH
 
     - name: Safeguard Asset Embedding Headers
       run: |
@@ -34,8 +45,8 @@ jobs:
       run: |
         cd payload
         mkdir -p build && cd build
-        # Run the compilation cleanly using the official globally mapped prospero flags
-        prospero-cmake -DCMAKE_C_COMPILER_WORKS=1 ..
+        # Force system compilation using the globally exposed prospero compiler architecture
+        /usr/share/ps5-payload-sdk/bin/prospero-cmake -DCMAKE_C_COMPILER_WORKS=1 ..
         cmake --build .
 
     - name: Upload Completed Production Packages
