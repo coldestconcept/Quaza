@@ -10,12 +10,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Payload
+      - name: Checkout Project
         uses: actions/checkout@v4
         with:
           path: main-repo
 
-      - name: Install Dependencies
+      - name: Install System Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake llvm clang lld make python3
@@ -27,21 +27,24 @@ jobs:
           path: target-sdk
 
       - name: Compile SDK Stubs
-        # CRITICAL: This creates the libkernel.a the linker is currently missing
+        # This generates libkernel.a and other vital stubs
         working-directory: target-sdk
         run: make
 
       - name: Build Payload
         working-directory: main-repo/payload
+        env:
+          PS5_PAYLOAD_SDK: ${{ github.workspace }}/target-sdk
         run: |
           mkdir build
+          # Fixed the path to prospero.cmake and passed the SDK root
           cmake -B build \
-            -DCMAKE_TOOLCHAIN_FILE=$GITHUB_WORKSPACE/target-sdk/cmake/ps5.toolchain.cmake \
-            -DPS5_PAYLOAD_SDK=$GITHUB_WORKSPACE/target-sdk \
+            -DCMAKE_TOOLCHAIN_FILE=$PS5_PAYLOAD_SDK/toolchain/prospero.cmake \
+            -DPS5_PAYLOAD_SDK=$PS5_PAYLOAD_SDK \
             -DCMAKE_BUILD_TYPE=Release
           cmake --build build
 
-      - name: Upload Artifacts
+      - name: Upload ELF Artifact
         uses: actions/upload-artifact@v4
         with:
           name: quaza_payload
