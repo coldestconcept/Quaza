@@ -34,9 +34,9 @@ target_link_options(quaza_payload.elf PRIVATE
     "-nostdlib"
 )
 
-# Explicitly link the runtime initialization (crt1.o) followed by dynamic stubs
+# Explicitly link using absolute paths to prevent C/C++ target resolution errors
 target_link_libraries(quaza_payload.elf PRIVATE
     "$ENV{PS5_PAYLOAD_SDK}/lib/crt1.o"
+    "$ENV{PS5_PAYLOAD_SDK}/lib/libc.a"
     kernel
-    libc
 )
