@@ -1,0 +1,51 @@
+name: PS5 Payload Automated CI Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository Source Code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Setup Python Environment
+      uses: actions/setup-python@v5
+      with:
+        python-level: '3.x'
+
+    - name: Set up PS5 Payload SDK Toolchain
+      run: |
+        sudo apt-get update && sudo apt-get install -y wget unzip cmake make
+        mkdir -p $HOME/target-sdk
+        wget "https://github.com" -O sdk.zip
+        unzip -o sdk.zip -d $HOME/target-sdk
+        rm sdk.zip
+        echo "PS5_PAYLOAD_SDK=$HOME/target-sdk/ps5-payload-sdk" >> $GITHUB_ENV
+
+    - name: Run Embedded Asset Generation Scripts
+      run: |
+        python3 payload/tools/gen_embed.py || true
+        python3 payload/tools/gen_param_sfo.py payload/sce_sys/param_sfo_config.json param.sfo || true
+
+    - name: Configure and Execute CMake Cross-Compilation
+      run: |
+        cd payload
+        mkdir build && cd build
+        cmake -DCMAKE_TOOLCHAIN_FILE="${{ env.PS5_PAYLOAD_SDK }}/toolchain/prospero.cmake" -DCMAKE_C_COMPILER_WORKS=1 ..
+        cmake --build .
+
+    - name: Upload Completed Production Packages
+      uses: actions/upload-artifact@v4
+      with:
+        name: Quaza-PS5-Payload-Package
+        path: |
+          payload/build/*.elf
+          payload/build/*.pkg
