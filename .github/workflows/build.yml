@@ -27,7 +27,6 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y cmake make python3 clang-15 lld-15
-        echo "PS5_PAYLOAD_SDK=$GITHUB_WORKSPACE/target-sdk" >> $GITHUB_ENV
 
     - name: Safeguard Asset Embedding Headers
       run: |
@@ -41,14 +40,20 @@ jobs:
 
     - name: Configure and Execute Toolchain Wrapper Cross-Compilation
       run: |
+        # Fixed: Dynamically sweeps and registers the exact toolchain and target system paths on the server
+        REAL_TOOLCHAIN=$(find $GITHUB_WORKSPACE/target-sdk -name "prospero.cmake" -type f | head -n 1)
+        REAL_TARGET_DIR=$(find $GITHUB_WORKSPACE/target-sdk -name "target" -type d | head -n 1)
+        if [ -z "$REAL_TARGET_DIR" ]; then
+            REAL_TARGET_DIR="$GITHUB_WORKSPACE/target-sdk"
+        fi
+        
         cd main-repo/payload
         mkdir -p build && cd build
-        # Fixed: Explicitly maps the build tool program and C compiler paths directly to the execution arguments
         cmake -DCMAKE_MAKE_PROGRAM=/usr/bin/make \
               -DCMAKE_C_COMPILER=/usr/bin/clang-15 \
-              -DCMAKE_TOOLCHAIN_FILE="${{ env.PS5_PAYLOAD_SDK }}/toolchain/prospero.cmake" \
+              -DCMAKE_TOOLCHAIN_FILE="$REAL_TOOLCHAIN" \
               -DCMAKE_C_COMPILER_WORKS=1 \
-              -DSDK_PATH="${{ env.PS5_PAYLOAD_SDK }}/target" ..
+              -DSDK_PATH="$REAL_TARGET_DIR" ..
         cmake --build .
 
     - name: Upload Completed Production Packages
