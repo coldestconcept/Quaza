@@ -18,7 +18,6 @@ jobs:
         submodules: recursive
 
     - name: Checkout SDK Configuration Framework Natively via API
-      # Fixed: Uses GitHub's official native module to fetch the SDK properties securely without raw links
       uses: actions/checkout@v4
       with:
         repository: ps5-payload-dev/sdk
@@ -44,7 +43,10 @@ jobs:
       run: |
         cd main-repo/payload
         mkdir -p build && cd build
-        cmake -DCMAKE_TOOLCHAIN_FILE="${{ env.PS5_PAYLOAD_SDK }}/toolchain/prospero.cmake" \
+        # Fixed: Explicitly maps the build tool program and C compiler paths directly to the execution arguments
+        cmake -DCMAKE_MAKE_PROGRAM=/usr/bin/make \
+              -DCMAKE_C_COMPILER=/usr/bin/clang-15 \
+              -DCMAKE_TOOLCHAIN_FILE="${{ env.PS5_PAYLOAD_SDK }}/toolchain/prospero.cmake" \
               -DCMAKE_C_COMPILER_WORKS=1 \
               -DSDK_PATH="${{ env.PS5_PAYLOAD_SDK }}/target" ..
         cmake --build .
