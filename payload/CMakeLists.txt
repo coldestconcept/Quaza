@@ -34,9 +34,12 @@ target_link_options(quaza_payload.elf PRIVATE
     "-nostdlib"
 )
 
-# Explicitly link using absolute paths to prevent C/C++ target resolution errors
+# Explicitly link using absolute paths to prevent target-triple resolution issues
+# Added SceLibcInternal and SceLncUtil stubs to resolve runtime symbols
 target_link_libraries(quaza_payload.elf PRIVATE
     "$ENV{PS5_PAYLOAD_SDK}/lib/crt1.o"
     "$ENV{PS5_PAYLOAD_SDK}/lib/libc.a"
     kernel
+    SceLibcInternal
+    SceLncUtil
 )
