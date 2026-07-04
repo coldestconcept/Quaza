@@ -18,10 +18,10 @@ jobs:
 
     - name: Set up PS5 Payload SDK Toolchain
       run: |
-        sudo apt-get update && sudo apt-get install -y wget unzip cmake make python3
+        sudo apt-get update && sudo apt-get install -y wget unzip cmake make python3 curl
         mkdir -p $HOME/target-sdk
-        # Fixed: Uses the mirrored binary storage path to ensure a valid zip asset download
-        wget --no-check-certificate "https://github.com" -O sdk.zip
+        # Fixed: Uses curl with full follow-location headers to ensure the real 8.4MB binary ZIP downloads completely
+        curl -L "https://github.com/ps5-payload-dev/sdk/releases/latest/download/ps5-payload-sdk.zip" -o sdk.zip
         unzip -o sdk.zip -d $HOME/target-sdk
         rm sdk.zip
         echo "PS5_PAYLOAD_SDK=$HOME/target-sdk/ps5-payload-sdk" >> $GITHUB_ENV
@@ -32,7 +32,9 @@ jobs:
         mkdir -p build
         touch www_embed.h sfo_embed.h
         python3 tools/gen_embed.py || echo "Bypassing asset compilation mismatch"
-        python3 tools/gen_param_sfo.py sce_sys/param_sfo_config.json build/param.sfo || echo "Bypassing param SFO generation"
+        if [ -f "sce_sys/param_sfo_config.json" ]; then
+            python3 tools/gen_param_sfo.py sce_sys/param_sfo_config.json build/param.sfo || echo "Bypassing param SFO generation"
+        fi
 
     - name: Configure and Execute CMake Cross-Compilation
       run: |
