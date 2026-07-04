@@ -9,41 +9,6 @@ if(NOT DEFINED ENV{PS5_PAYLOAD_SDK})
     message(FATAL_ERROR
         "PS5_PAYLOAD_SDK not set.\n"
         "Run: export PS5_PAYLOAD_SDK=/opt/ps5-payload-sdk\n"
-        "See docs/BUILD.md for full setup instructions.")
-endif()
-set(PS5_SDK $ENV{PS5_PAYLOAD_SDK})
-
-# ── Embed www/ assets into ELF (offline mode) ────────────────────────────
-# Regenerate whenever www/ files change:  python3 payload/tools/gen_embed.py
-if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/www_embed.h")
-    message(STATUS "Generating www_embed.h...")
-    execute_process(
-        COMMAND python3 "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_embed.py"
-        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-        RESULT_VARIABLE embed_rc)
-    if(NOT embed_rc EQUAL 0)
-        message(FATAL_ERROR "gen_embed.py failed (exit ${embed_rc})")
-    endif()
-endif()
-
-# ── Embed param.sfo binary ───────────────────────────────────────────────
-# Regenerate when param_sfo_config.json changes:
-#   python3 payload/tools/gen_param_sfo.py \
-#       payload/sce_sys/param_sfo_config.json /tmp/param.sfo
-#   python3 - (embed script embedded in CMakeLists below)
-if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/sfo_embed.h")
-    message(STATUS "Generating sfo_embed.h...")
-    execute_process(
-        COMMAND python3 "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_param_sfo.py"
-                "${CMAKE_CURRENT_SOURCE_DIR}/sce_sys/param_sfo_config.json"
-                "${CMAKE_CURRENT_BINARY_DIR}/param.sfo"
-        RESULT_VARIABLE sfo_rc)
-    if(NOT sfo_rc EQUAL 0)
-        message(FATAL_ERROR "gen_param_sfo.py failed")
-    endif()
-    execute_process(
-        COMMAND python3 "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_sfo_embed.py"
-                "${CMAKE_CURRENT_BINARY_DIR}/param.sfo"
                 "${CMAKE_CURRENT_SOURCE_DIR}/sfo_embed.h"
         RESULT_VARIABLE embed_sfo_rc)
     if(NOT embed_sfo_rc EQUAL 0)
