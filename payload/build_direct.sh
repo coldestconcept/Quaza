@@ -32,13 +32,19 @@ echo "[info] tile_pkg_embed.h: $(wc -c < "$PAYLOAD/tile_pkg_embed.h") bytes"
 # =============================================================================
 mkstub() {
   # mkstub <soname.sprx> <libname.so> [sym ...]
+  # Two-step: clang compiles .c->.o (no link), ld.lld links .o->.so directly.
+  # Avoids clang's internal linker lookup failing on Termux ($PATH issue).
   soname="$1"; out="$SDK_STUBS/$2"; shift 2
-  src="${TMPDIR:-$BUILD}/_ps5stub_$.c"
+  tmp="${TMPDIR:-$BUILD}"
+  src="$tmp/_ps5stub_$.c"
+  obj="$tmp/_ps5stub_$.o"
   printf '' > "$src"
   for s; do printf 'void %s(void){}\n' "$s" >> "$src"; done
   $CLANG --target=x86_64-sie-ps5 --sysroot="$SDK" \
-    -shared -nostdlib -fPIC "-Wl,-soname,$soname" -o "$out" "$src"
-  rm -f "$src"
+    -fPIC -nostdlib -ffreestanding -c "$src" -o "$obj"
+  $LDLLD -m elf_x86_64 -shared -nostdlib \
+    "--soname=$soname" -o "$out" "$obj"
+  rm -f "$src" "$obj"
   echo "  stub $soname"
 }
 
