@@ -1,24 +1,20 @@
 name: PS5 Payload Build
 
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+on: [push, pull_request]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Project
+      - name: Checkout Payload
         uses: actions/checkout@v4
         with:
           path: main-repo
 
-      - name: Install System Dependencies
+      - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake llvm clang lld make python3
+          sudo apt-get install -y cmake llvm-18 clang-18 lld-18 make python3
 
       - name: Checkout PS5 SDK
         uses: actions/checkout@v4
@@ -26,25 +22,43 @@ jobs:
           repository: ps5-payload-dev/sdk
           path: target-sdk
 
-      - name: Compile SDK Stubs
-        # This generates libkernel.a and other vital stubs
-        working-directory: target-sdk
-        run: make
+      - name: Build and Consolidate SDK
+        run: |
+          cd target-sdk
+          make
+          # Consolidate libraries into a single /lib folder for CMake
+          mkdir -p lib
+          find . -name "*.a" -exec cp {} ./lib/ \;
+          find . -name "*.so" -exec cp {} ./lib/ \;
+          # Ensure crt1.o is accessible
+          cp crt/crt1.o ./lib/
+          echo "PS5_PAYLOAD_SDK=$GITHUB_WORKSPACE/target-sdk" >> $GITHUB_ENV
+
+      - name: Generate Toolchain File
+        run: |
+          cat << 'TC' > ps5_toolchain.cmake
+          set(CMAKE_SYSTEM_NAME FreeBSD)
+          set(CMAKE_SYSTEM_PROCESSOR x86_64)
+          set(CMAKE_C_COMPILER clang-18)
+          set(CMAKE_C_COMPILER_TARGET x86_64-sie-ps5)
+          set(CMAKE_AR llvm-ar-18)
+          set(CMAKE_RANLIB llvm-ranlib-18)
+          set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+          
+          set(PS5_SDK "$ENV{PS5_PAYLOAD_SDK}")
+          include_directories(${PS5_SDK}/include)
+          link_directories(${PS5_SDK}/lib)
+          TC
 
       - name: Build Payload
         working-directory: main-repo/payload
-        env:
-          PS5_PAYLOAD_SDK: ${{ github.workspace }}/target-sdk
         run: |
-          mkdir build
-          # Fixed the path to prospero.cmake and passed the SDK root
           cmake -B build \
-            -DCMAKE_TOOLCHAIN_FILE=$PS5_PAYLOAD_SDK/toolchain/prospero.cmake \
-            -DPS5_PAYLOAD_SDK=$PS5_PAYLOAD_SDK \
+            -DCMAKE_TOOLCHAIN_FILE=$GITHUB_WORKSPACE/ps5_toolchain.cmake \
             -DCMAKE_BUILD_TYPE=Release
           cmake --build build
 
-      - name: Upload ELF Artifact
+      - name: Upload Build
         uses: actions/upload-artifact@v4
         with:
           name: quaza_payload
