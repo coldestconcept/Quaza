@@ -66,7 +66,9 @@ fix_stub libkernel.sprx libkernel.so \
   pthread_cond_init pthread_cond_wait pthread_cond_signal \
   pthread_cond_broadcast pthread_cond_destroy \
   pthread_self pthread_attr_init pthread_attr_destroy pthread_attr_setstacksize \
-  usleep sleep \
+  usleep sleep time \
+  signal \
+  opendir readdir closedir \
   sceKernelSendNotificationRequest sceKernelGetAppInfo sceKernelUsleep
 
 # libSceLibcInternal.sprx  — libc (stdio, string, memory, ctype, stdlib)
@@ -80,7 +82,7 @@ fix_stub libSceLibcInternal.sprx libSceLibcInternal.so \
   memset memcpy memmove memchr memcmp bzero \
   malloc calloc realloc free \
   abort exit _exit \
-  strtol strtoll strtoul strtoull strtod atoi atol atof \
+  strtol strtoll strtoul strtoull strtod strtok atoi atol atof \
   isalpha isalnum isspace isdigit isupper islower isxdigit isprint iscntrl \
   toupper tolower \
   strerror perror getcwd getenv asprintf \
