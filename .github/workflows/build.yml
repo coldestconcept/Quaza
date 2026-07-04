@@ -11,25 +11,28 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Repository Source Code
+    - name: Checkout Project Source Code
       uses: actions/checkout@v4
       with:
+        path: main-repo
         submodules: recursive
 
-    - name: Deploy Standard Cross-Compiler environment
+    - name: Checkout SDK Configuration Framework Natively via API
+      # Fixed: Uses GitHub's official native module to fetch the SDK properties securely without raw links
+      uses: actions/checkout@v4
+      with:
+        repository: ps5-payload-dev/sdk
+        path: target-sdk
+
+    - name: Deploy Core Cross-Compiler Tools
       run: |
         sudo apt-get update
-        # Installs the precise cross-compilation compiler environment natively from Ubuntu's primary core distribution servers
         sudo apt-get install -y cmake make python3 clang-15 lld-15
-        mkdir -p $HOME/target-sdk
-        
-        # Pull down just the configuration files from the source tree to map your prospero build variables
-        git clone --depth=1 https://github.com $HOME/target-sdk/ps5-payload-sdk
-        echo "PS5_PAYLOAD_SDK=$HOME/target-sdk/ps5-payload-sdk" >> $GITHUB_ENV
+        echo "PS5_PAYLOAD_SDK=$GITHUB_WORKSPACE/target-sdk" >> $GITHUB_ENV
 
     - name: Safeguard Asset Embedding Headers
       run: |
-        cd payload
+        cd main-repo/payload
         mkdir -p build
         touch www_embed.h sfo_embed.h
         python3 tools/gen_embed.py || echo "Bypassing asset compilation mismatch"
@@ -39,9 +42,8 @@ jobs:
 
     - name: Configure and Execute Toolchain Wrapper Cross-Compilation
       run: |
-        cd payload
+        cd main-repo/payload
         mkdir -p build && cd build
-        # Run compilation cleanly inside the verified cross-compiler container environment
         cmake -DCMAKE_TOOLCHAIN_FILE="${{ env.PS5_PAYLOAD_SDK }}/toolchain/prospero.cmake" \
               -DCMAKE_C_COMPILER_WORKS=1 \
               -DSDK_PATH="${{ env.PS5_PAYLOAD_SDK }}/target" ..
@@ -52,5 +54,5 @@ jobs:
       with:
         name: Quaza-PS5-Payload-Package
         path: |
-          payload/build/*.elf
-          payload/build/*.pkg
+          main-repo/payload/build/*.elf
+          main-repo/payload/build/*.pkg
