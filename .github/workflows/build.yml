@@ -16,9 +16,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake llvm-18 clang-18 lld-18 make python3
           
-          # Create system-wide symlinks for the PS5 target linker wrapper
-          sudo ln -sf /usr/bin/ld.lld-18 /usr/bin/prospero-lld
-          sudo ln -sf /usr/bin/ld.lld-18 /usr/lib/llvm-18/bin/prospero-lld
+          # Deploy prospero-lld wrapper scripts to preserve ld.lld argv[0] mapping
+          sudo tee /usr/bin/prospero-lld << 'WRAPPER'
+          #!/bin/bash
+          exec /usr/bin/ld.lld "$@"
+          WRAPPER
+          sudo chmod +x /usr/bin/prospero-lld
+          
+          # Inject the wrapper into the LLVM binary path search index
+          sudo mkdir -p /usr/lib/llvm-18/bin
+          sudo cp /usr/bin/prospero-lld /usr/lib/llvm-18/bin/prospero-lld
 
       - name: Checkout PS5 SDK
         uses: actions/checkout@v4
@@ -61,10 +68,6 @@ jobs:
           set(CMAKE_AR llvm-ar-18)
           set(CMAKE_RANLIB llvm-ranlib-18)
           set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
-          
-          # Enforce position-independent code configurations natively
-          set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-          set(BUILD_SHARED_LIBS OFF CACHE INTERNAL "Shared libs not available")
           
           include_directories(${PS5_SDK}/include ${PS5_SDK}/include/freebsd)
           link_directories(${PS5_SDK}/lib)

@@ -3,7 +3,7 @@ project(quaza_payload C)
 
 set(CMAKE_C_STANDARD 11)
 
-# Mandatory PS5 freestanding options
+# Mandatory PS5 freestanding flags
 add_compile_options(-ffreestanding -fno-builtin -nostdlib -fPIC -Wall)
 
 # Header Search Paths
@@ -30,7 +30,6 @@ set(SOURCES
 add_executable(quaza_payload.elf ${SOURCES})
 
 # Linker setup: Use SDK linker script and standard freestanding linker constraints
-# Dropped -static to allow dynamic resolution of PRX/SPRX stubs on the PS5
 target_link_options(quaza_payload.elf PRIVATE 
     "-T" "$ENV{PS5_PAYLOAD_SDK}/linker.x"
     "-nostdlib"
