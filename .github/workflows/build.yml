@@ -14,7 +14,6 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          # Install lld along with lld-18 for system-wide alias resolution
           sudo apt-get install -y cmake llvm-18 clang-18 lld lld-18 make python3
           
           # Deploy prospero-lld wrapper script pointing to the absolute versioned binary path
@@ -54,11 +53,47 @@ jobs:
           find . -name "*.so" -exec cp {} ./lib/ \;
           cp crt/crt1.o ./lib/
           
-          # Generate and compile the SceLncUtil stub dynamically using correct linker wrapper flags (-Wl)
+          # Generate and compile the SceLncUtil stub dynamically using correct linker wrapper flags
           echo 'void sceLncUtilLaunchWebBrowser2() {}' > libSceLncUtil.c
           clang-18 -target x86_64-sie-ps5 -fPIC -shared -Wl,-soname,libSceLncUtil.sprx -o lib/libSceLncUtil.so libSceLncUtil.c
           
           echo "PS5_PAYLOAD_SDK=$GITHUB_WORKSPACE/target-sdk" >> $GITHUB_ENV
+
+      - name: Repair CMakeLists.txt On-The-Fly
+        run: |
+          cat << 'CMAKE' > main-repo/payload/CMakeLists.txt
+          cmake_minimum_required(VERSION 3.15)
+          project(quaza_payload C)
+          
+          set(CMAKE_C_STANDARD 11)
+          
+          # Mandatory PS5 freestanding flags
+          add_compile_options(-ffreestanding -fno-builtin -nostdlib -fPIC -Wall)
+          
+          # Header Search Paths
+          include_directories(${CMAKE_CURRENT_SOURCE_DIR}/libprosperopkg/include)
+          include_directories($ENV{PS5_PAYLOAD_SDK}/include)
+          include_directories($ENV{PS5_PAYLOAD_SDK}/include/freebsd)
+          
+          # Automatically find ALL .c files in the payload folder (fixes missing kstuff/jailbreak modules)
+          file(GLOB_RECURSE SOURCES "*.c")
+          
+          add_executable(quaza_payload.elf ${SOURCES})
+          
+          target_link_options(quaza_payload.elf PRIVATE "-nostdlib")
+          
+          # Link all necessary system stubs
+          target_link_libraries(quaza_payload.elf PRIVATE
+              "$ENV{PS5_PAYLOAD_SDK}/lib/crt1.o"
+              "$ENV{PS5_PAYLOAD_SDK}/lib/libc.a"
+              kernel
+              SceLibcInternal
+              SceLncUtil
+              SceAppInstUtil
+              SceUserService
+              SceSysmodule
+          )
+          CMAKE
 
       - name: Run Asset Generators
         run: |
@@ -77,15 +112,12 @@ jobs:
           set(CMAKE_C_COMPILER_TARGET x86_64-sie-ps5)
           
           set(PS5_SDK "$ENV{PS5_PAYLOAD_SDK}")
-          
-          # Isolate system headers using sysroot and isystem flags
           set(CMAKE_C_FLAGS "--sysroot=${PS5_SDK} -isystem ${PS5_SDK}/include -isystem ${PS5_SDK}/include/freebsd" CACHE STRING "" FORCE)
           
           set(CMAKE_AR llvm-ar-18)
           set(CMAKE_RANLIB llvm-ranlib-18)
           set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
           
-          # Enforce position-independent code configurations natively
           set(CMAKE_POSITION_INDEPENDENT_CODE ON)
           set(BUILD_SHARED_LIBS OFF CACHE INTERNAL "Shared libs not available")
           
@@ -96,9 +128,7 @@ jobs:
       - name: Compile PS5 Payload Binaries
         working-directory: main-repo/payload
         run: |
-          cmake -B build \
-            -DCMAKE_TOOLCHAIN_FILE=$GITHUB_WORKSPACE/ps5_toolchain.cmake \
-            -DCMAKE_BUILD_TYPE=Release
+          cmake -B build -DCMAKE_TOOLCHAIN_FILE=$GITHUB_WORKSPACE/ps5_toolchain.cmake -DCMAKE_BUILD_TYPE=Release
           cmake --build build
           
           # Convert position-independent ELF to raw dynamic BIN payload
