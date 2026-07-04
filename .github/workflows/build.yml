@@ -14,7 +14,6 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          # Install lld along with lld-18 for system-wide alias resolution
           sudo apt-get install -y cmake llvm-18 clang-18 lld lld-18 make python3
           
           # Deploy prospero-lld wrapper script pointing to the absolute versioned binary path
@@ -39,7 +38,7 @@ jobs:
           cd target-sdk
           make
           mkdir -p lib
-          # Consolidate dynamic stubs and static libraries
+          # Consolidate dynamic stubs, static libraries, and custom kernel modules
           find . -name "*.a" -exec cp {} ./lib/ \;
           find . -name "*.so" -exec cp {} ./lib/ \;
           cp crt/crt1.o ./lib/

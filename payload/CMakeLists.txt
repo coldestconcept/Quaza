@@ -3,7 +3,7 @@ project(quaza_payload C)
 
 set(CMAKE_C_STANDARD 11)
 
-# Mandatory PS5 freestanding flags
+# Enforce freestanding compiler options
 add_compile_options(-ffreestanding -fno-builtin -nostdlib -fPIC -Wall)
 
 # Header Search Paths
@@ -11,7 +11,8 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/libprosperopkg/include)
 include_directories($ENV{PS5_PAYLOAD_SDK}/include)
 include_directories($ENV{PS5_PAYLOAD_SDK}/include/freebsd)
 
-# Source Files
+# Explicitly list source files
+# This ensures that all custom helper modules are compiled into the payload
 set(SOURCES
     main.c
     pkg_server.c
@@ -29,17 +30,22 @@ set(SOURCES
 
 add_executable(quaza_payload.elf ${SOURCES})
 
-# Linker setup: Exclude standard libraries
+# Linker setup: Exclude standard host libraries
 target_link_options(quaza_payload.elf PRIVATE 
     "-nostdlib"
 )
 
-# Explicitly link using absolute paths to prevent target-triple resolution issues
-# Added SceLibcInternal and SceLncUtil stubs to resolve runtime symbols
+# Link against the target stubs compiled in the SDK
+# We link the specific library modules to resolve the undefined symbols:
+# - SceUserService: sceUserServiceInitialize
+# - SceAppInstUtil: sceAppInstUtilInitialize, sceAppInstUtilAppPrepareInstall, sceAppInstUtilAppInstall, sceAppInstUtilAppRecover
+# - SceLncUtil: sceLncUtilLaunchWebBrowser2
 target_link_libraries(quaza_payload.elf PRIVATE
     "$ENV{PS5_PAYLOAD_SDK}/lib/crt1.o"
     "$ENV{PS5_PAYLOAD_SDK}/lib/libc.a"
     kernel
     SceLibcInternal
     SceLncUtil
+    SceUserService
+    SceAppInstUtil
 )
