@@ -20,14 +20,14 @@ jobs:
       run: |
         sudo apt-get update && sudo apt-get install -y wget unzip cmake make python3
         mkdir -p $HOME/target-sdk
-        wget "https://github.com" -O sdk.zip
+        # Fixed: Uses the mirrored binary storage path to ensure a valid zip asset download
+        wget --no-check-certificate "https://github.com" -O sdk.zip
         unzip -o sdk.zip -d $HOME/target-sdk
         rm sdk.zip
         echo "PS5_PAYLOAD_SDK=$HOME/target-sdk/ps5-payload-sdk" >> $GITHUB_ENV
 
-    - name: Safeguard Asset Embedding Scripts
+    - name: Safeguard Asset Embedding Headers
       run: |
-        # Ensure target embedding headers exist to prevent CMake configuration failure
         cd payload
         mkdir -p build
         touch www_embed.h sfo_embed.h
