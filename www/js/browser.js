@@ -18,8 +18,56 @@
     const selectedLabelEl  = document.getElementById('browserSelectedLabel');
     const browseBtn         = document.getElementById('browseBtn');
     const dumpPathInput    = document.getElementById('dumpPath');
+    const bookmarkBtn        = document.getElementById('browserBookmarkBtn');
 
     if (!overlay || !browseBtn) return; // markup not present on this page
+
+    // ── Bookmarks: quick-access shortcuts to frequently-used dump folders,
+    // persisted in localStorage so they survive across sessions. ──────────
+    const BOOKMARKS_KEY = 'quaza_browser_bookmarks';
+
+    function loadBookmarks() {
+        try {
+            const raw = localStorage.getItem(BOOKMARKS_KEY);
+            const arr = raw ? JSON.parse(raw) : [];
+            return Array.isArray(arr) ? arr.filter(p => typeof p === 'string') : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function saveBookmarks(list) {
+        try {
+            localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(list));
+        } catch (e) {
+            console.warn('[Quaza] could not persist bookmarks:', e);
+        }
+    }
+
+    let bookmarks = loadBookmarks();
+
+    function isBookmarked(path) {
+        return !!path && bookmarks.includes(path);
+    }
+
+    function toggleBookmark(path) {
+        if (!path) return;
+        bookmarks = isBookmarked(path)
+            ? bookmarks.filter(p => p !== path)
+            : [...bookmarks, path];
+        saveBookmarks(bookmarks);
+        renderBookmarkBtn();
+        // If we're sitting at the root shortcuts view, refresh it so the
+        // Bookmarks section updates immediately.
+        if (currentPath === null) loadPath(null);
+    }
+
+    function renderBookmarkBtn() {
+        const active = currentPath !== null && isBookmarked(currentPath);
+        bookmarkBtn.disabled = currentPath === null;
+        bookmarkBtn.classList.toggle('active', active);
+        bookmarkBtn.title = active ? 'Remove bookmark' : 'Bookmark this folder';
+    }
 
     const FOLDER_ICON =
         '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">' +
@@ -49,13 +97,63 @@
     function renderBreadcrumb() {
         breadcrumbEl.textContent = currentPath === null ? 'Storage Devices' : currentPath;
         upBtn.disabled = currentPath === null;
+        renderBookmarkBtn();
+    }
+
+    function makeRow(fullPath, displayName, { removable } = {}) {
+        const row = document.createElement('div');
+        row.className = 'browser-row';
+        row.innerHTML =
+            `<span class="browser-row-icon">${FOLDER_ICON}</span>` +
+            `<span class="browser-row-name">${escapeHtml(displayName)}</span>` +
+            (removable ? '<span class="browser-row-remove" title="Remove bookmark">✕</span>' : '<span class="browser-row-chevron">▸</span>');
+
+        row.addEventListener('click', (e) => {
+            if (removable && e.target.closest('.browser-row-remove')) return;
+            listEl.querySelectorAll('.browser-row.selected').forEach(r => r.classList.remove('selected'));
+            row.classList.add('selected');
+            setSelected(fullPath);
+        });
+        row.addEventListener('dblclick', () => loadPath(fullPath));
+
+        if (removable) {
+            row.querySelector('.browser-row-remove').addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleBookmark(fullPath);
+            });
+        }
+
+        return row;
+    }
+
+    function renderBookmarksSection() {
+        if (bookmarks.length === 0) return;
+
+        const label = document.createElement('div');
+        label.className = 'browser-section-label';
+        label.textContent = 'Bookmarks';
+        listEl.appendChild(label);
+
+        bookmarks.slice().sort().forEach(path => {
+            listEl.appendChild(makeRow(path, path, { removable: true }));
+        });
+
+        const divider = document.createElement('div');
+        divider.className = 'browser-section-divider';
+        listEl.appendChild(divider);
     }
 
     function renderEntries(entries) {
         listEl.innerHTML = '';
 
+        if (currentPath === null) renderBookmarksSection();
+
         if (!entries || entries.length === 0) {
-            listEl.innerHTML = '<div class="browser-empty">This folder is empty.</div>';
+            if (currentPath === null && bookmarks.length > 0) return; // bookmarks alone are fine
+            const empty = document.createElement('div');
+            empty.className = 'browser-empty';
+            empty.textContent = 'This folder is empty.';
+            listEl.appendChild(empty);
             return;
         }
 
@@ -63,30 +161,17 @@
         const dirs  = entries.filter(e => e.type === 'dir').sort((a, b) => a.name.localeCompare(b.name));
         const files = entries.filter(e => e.type !== 'dir').sort((a, b) => a.name.localeCompare(b.name));
 
-        [...dirs, ...files].forEach(entry => {
-            const row = document.createElement('div');
-            const isDir = entry.type === 'dir';
+        dirs.forEach(entry => {
             const fullPath = joinPath(currentPath, entry.name);
-            const displayName = currentPath === null ? entry.name : entry.name;
+            listEl.appendChild(makeRow(fullPath, entry.name));
+        });
 
-            row.className = 'browser-row' + (isDir ? '' : ' disabled');
+        files.forEach(entry => {
+            const row = document.createElement('div');
+            row.className = 'browser-row disabled';
             row.innerHTML =
-                `<span class="browser-row-icon${isDir ? '' : ' file'}">${isDir ? FOLDER_ICON : FILE_ICON}</span>` +
-                `<span class="browser-row-name">${escapeHtml(displayName)}</span>` +
-                (isDir ? '<span class="browser-row-chevron">▸</span>' : '');
-
-            if (isDir) {
-                row.addEventListener('click', () => {
-                    // Single click: highlight/select this folder as the candidate.
-                    listEl.querySelectorAll('.browser-row.selected').forEach(r => r.classList.remove('selected'));
-                    row.classList.add('selected');
-                    setSelected(fullPath);
-                });
-                row.addEventListener('dblclick', () => {
-                    loadPath(fullPath);
-                });
-            }
-
+                `<span class="browser-row-icon file">${FILE_ICON}</span>` +
+                `<span class="browser-row-name">${escapeHtml(entry.name)}</span>`;
             listEl.appendChild(row);
         });
     }
@@ -126,7 +211,7 @@
 
     function openBrowser() {
         overlay.classList.add('open');
-        loadPath(dumpPathInput && dumpPathInput.value.trim() ? null : null);
+        loadPath(null); // always start at the root shortcuts / bookmarks view
     }
 
     function closeBrowser() {
@@ -140,6 +225,11 @@
     upBtn.addEventListener('click', () => {
         if (currentPath === null) return;
         loadPath(currentParent || null);
+    });
+
+    bookmarkBtn.addEventListener('click', () => {
+        if (currentPath === null) return;
+        toggleBookmark(currentPath);
     });
 
     selectBtn.addEventListener('click', () => {

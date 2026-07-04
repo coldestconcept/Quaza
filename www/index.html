@@ -185,7 +185,7 @@
             border-bottom: 1px solid rgba(45, 120, 150, 0.15);
             background: rgba(255,255,255,0.35);
         }
-        .browser-up-btn, .browser-close-btn {
+        .browser-up-btn, .browser-close-btn, .browser-bookmark-btn {
             flex-shrink: 0;
             width: 32px;
             height: 32px;
@@ -198,10 +198,15 @@
             align-items: center;
             justify-content: center;
             font-size: 0.95rem;
-            transition: background 0.15s;
+            transition: background 0.15s, color 0.15s;
         }
-        .browser-up-btn:hover:not(:disabled), .browser-close-btn:hover { background: rgba(94, 207, 238, 0.35); }
-        .browser-up-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+        .browser-up-btn:hover:not(:disabled), .browser-close-btn:hover, .browser-bookmark-btn:hover:not(:disabled) { background: rgba(94, 207, 238, 0.35); }
+        .browser-up-btn:disabled, .browser-bookmark-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+        .browser-bookmark-btn.active {
+            color: #e0a422;
+            background: rgba(224, 164, 34, 0.18);
+        }
+        .browser-bookmark-btn.active svg path { fill: currentColor; fill-opacity: 0.35; }
         .browser-breadcrumb {
             flex: 1;
             min-width: 0;
@@ -267,6 +272,31 @@
             flex-shrink: 0;
             color: #7ab5cc;
             font-size: 0.75rem;
+        }
+        .browser-row-remove {
+            flex-shrink: 0;
+            width: 22px;
+            height: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 7px;
+            color: #9ab8c6;
+            font-size: 0.75rem;
+            cursor: pointer;
+        }
+        .browser-row-remove:hover { background: rgba(220, 90, 90, 0.18); color: #c04040; }
+        .browser-section-label {
+            padding: 8px 12px 4px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #5a9ab5;
+        }
+        .browser-section-divider {
+            margin: 4px 10px 6px;
+            border-top: 1px solid rgba(45, 120, 150, 0.15);
         }
         .browser-modal-footer {
             display: flex;
@@ -465,6 +495,11 @@
                 </svg>
             </button>
             <div class="browser-breadcrumb" id="browserBreadcrumb">Storage Devices</div>
+            <button type="button" class="browser-bookmark-btn" id="browserBookmarkBtn" title="Bookmark this folder" aria-label="Bookmark this folder" disabled>
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M6 3.5C6 3.22 6.22 3 6.5 3H17.5C17.78 3 18 3.22 18 3.5V20.5C18 20.94 17.47 21.16 17.16 20.85L12.35 16.04C12.16 15.85 11.84 15.85 11.65 16.04L6.84 20.85C6.53 21.16 6 20.94 6 20.5V3.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                </svg>
+            </button>
             <button type="button" class="browser-close-btn" id="browserCloseBtn" aria-label="Close">✕</button>
         </div>
         <div class="browser-modal-body" id="browserList">
