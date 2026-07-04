@@ -16,20 +16,18 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Install PS5 Payload SDK via Official Package Manager
+    - name: Native Toolchain Dependencies Compilation
       run: |
         sudo apt-get update
-        sudo apt-get install -y curl gnupg cmake make python3
-        # 1. Trust and install the official developer distribution security key
-        curl -fsSL https://github.io | sudo gpg --dearmor -o /usr/share/keyrings/ps5-payload-dev.gpg
-        # 2. Add the official stable apt repository channel
-        echo "deb [signed-by=/usr/share/keyrings/ps5-payload-dev.gpg] https://github.io stable main" | sudo tee /etc/apt/sources.list.dist/ps5-payload-dev.list
-        # 3. Synchronize package maps and pull the complete native compiler tools
-        sudo apt-get update
-        sudo apt-get install -y ps5-payload-sdk
-        # 4. Export the correct configuration environment paths to the cloud runner
-        echo "PS5_PAYLOAD_SDK=/usr/share/ps5-payload-sdk" >> $GITHUB_ENV
-        echo "/usr/share/ps5-payload-sdk/bin" >> $GITHUB_PATH
+        # Install the precise clang and llvm requirements specified by the SDK layout
+        sudo apt-get install -y cmake make clang-15 lld-15 python3
+        cd $HOME
+        # Clone the official source repository directly into the server runner
+        git clone --recursive https://github.com ps5-payload-sdk
+        cd ps5-payload-sdk
+        # Set environment tracking variable flags
+        echo "PS5_PAYLOAD_SDK=$HOME/ps5-payload-sdk" >> $GITHUB_ENV
+        echo "$HOME/ps5-payload-sdk/bin" >> $GITHUB_PATH
 
     - name: Safeguard Asset Embedding Headers
       run: |
@@ -45,8 +43,11 @@ jobs:
       run: |
         cd payload
         mkdir -p build && cd build
-        # Uses the globally registered prospero-cmake script installed from the package system
-        prospero-cmake -DCMAKE_C_COMPILER_WORKS=1 ..
+        # Run the compilation script through the native, cloned prospero configurations
+        cmake -DCMAKE_TOOLCHAIN_FILE="${{ env.PS5_PAYLOAD_SDK }}/toolchain/prospero.cmake" \
+              -DPS5_PAYLOAD_SDK="${{ env.PS5_PAYLOAD_SDK }}" \
+              -DCMAKE_C_COMPILER_WORKS=1 \
+              -DSDK_PATH="${{ env.PS5_PAYLOAD_SDK }}/target" ..
         cmake --build .
 
     - name: Upload Completed Production Packages
