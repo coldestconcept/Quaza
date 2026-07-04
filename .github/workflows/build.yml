@@ -11,7 +11,7 @@ jobs:
         with:
           path: main-repo
 
-      - name: Install System Dependencies
+      - name: Install Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake llvm-18 clang-18 lld-18 make python3
@@ -36,7 +36,6 @@ jobs:
       - name: Run Asset Generators
         run: |
           cd main-repo/payload
-          # Run Python asset generators if they exist in the repository
           python3 tools/gen_embed.py || echo "gen_embed script skipped or unavailable"
           if [ -f "sce_sys/param_sfo_config.json" ]; then
               python3 tools/gen_param_sfo.py sce_sys/param_sfo_config.json build/param.sfo || echo "SFO generation bypassed"
@@ -52,12 +51,16 @@ jobs:
           
           set(PS5_SDK "$ENV{PS5_PAYLOAD_SDK}")
           
-          # Isolate system headers from the host using sysroot and isystem flags
+          # Isolate system headers using sysroot and isystem flags
           set(CMAKE_C_FLAGS "--sysroot=${PS5_SDK} -isystem ${PS5_SDK}/include -isystem ${PS5_SDK}/include/freebsd" CACHE STRING "" FORCE)
           
           set(CMAKE_AR llvm-ar-18)
           set(CMAKE_RANLIB llvm-ranlib-18)
           set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+          
+          # Enforce position-independent code configurations natively
+          set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+          set(BUILD_SHARED_LIBS OFF CACHE INTERNAL "Shared libs not available")
           
           include_directories(${PS5_SDK}/include ${PS5_SDK}/include/freebsd)
           link_directories(${PS5_SDK}/lib)

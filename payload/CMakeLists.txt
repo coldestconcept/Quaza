@@ -3,7 +3,7 @@ project(quaza_payload C)
 
 set(CMAKE_C_STANDARD 11)
 
-# Mandatory PS5 freestanding flags
+# Mandatory PS5 freestanding options
 add_compile_options(-ffreestanding -fno-builtin -nostdlib -fPIC -Wall)
 
 # Header Search Paths
@@ -29,12 +29,16 @@ set(SOURCES
 
 add_executable(quaza_payload.elf ${SOURCES})
 
-# Linker setup: Use SDK linker script and libraries
-# Removed -fuse-ld=lld as it is rejected by the x86_64-sie-ps5 compiler target
+# Linker setup: Use SDK linker script and standard freestanding linker constraints
+# Dropped -static to allow dynamic resolution of PRX/SPRX stubs on the PS5
 target_link_options(quaza_payload.elf PRIVATE 
-    -T $ENV{PS5_PAYLOAD_SDK}/linker.x 
-    -nostdlib 
-    -static
+    "-T" "$ENV{PS5_PAYLOAD_SDK}/linker.x"
+    "-nostdlib"
 )
 
-target_link_libraries(quaza_payload.elf kernel libc)
+# Explicitly link the runtime initialization (crt1.o) followed by dependencies
+target_link_libraries(quaza_payload.elf PRIVATE
+    "$ENV{PS5_PAYLOAD_SDK}/lib/crt1.o"
+    kernel
+    libc
+)
