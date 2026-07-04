@@ -18,7 +18,6 @@ jobs:
         submodules: recursive
 
     - name: Fetch SDK Framework via Authenticated Internal Submodule API
-      # Fixed: Uses GitHub's official native module to fetch the SDK properties securely via internal backend networks
       uses: actions/checkout@v4
       with:
         repository: ps5-payload-dev/sdk
@@ -30,6 +29,8 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y cmake make python3 clang-15 lld-15
         echo "PS5_PAYLOAD_SDK=$GITHUB_WORKSPACE/target-sdk" >> $GITHUB_ENV
+        # Register toolchain wrappers to the global execution path
+        echo "$GITHUB_WORKSPACE/target-sdk/bin" >> $GITHUB_PATH
 
     - name: Safeguard Asset Embedding Headers
       run: |
@@ -43,31 +44,14 @@ jobs:
 
     - name: Configure and Execute Toolchain Wrapper Cross-Compilation
       run: |
-        # Auto-detect toolchain blueprints recursively inside the internally synced repository tree
-        REAL_TOOLCHAIN=$(find $GITHUB_WORKSPACE/target-sdk -name "prospero.cmake" -type f | head -n 1)
-        SDK_BASE_DIR=$(dirname $(dirname "$REAL_TOOLCHAIN"))
-        
-        # Build comprehensive internal recursive maps for your compiler structures
-        ALL_INCLUDES=""
-        for inc_dir in $(find $GITHUB_WORKSPACE/target-sdk -name "include" -type d -o -name "include_common" -type d); do
-            ALL_INCLUDES="$ALL_INCLUDES -I$inc_dir"
-        done
-        
-        STDIO_PATH=$(find $GITHUB_WORKSPACE/target-sdk -name "stdio.h" -type f | head -n 1)
-        if [ ! -z "$STDIO_PATH" ]; then
-            ALL_INCLUDES="$ALL_INCLUDES -I$(dirname "$STDIO_PATH")"
-        fi
-        
-        export PS5_PAYLOAD_SDK="$SDK_BASE_DIR"
-        
         cd main-repo/payload
+        
+        # Eliminate the manual target flags overriding the compiler from CMakeLists.txt
+        sed -i '/-target/d' CMakeLists.txt
+        
         mkdir -p build && cd build
-        cmake -DCMAKE_MAKE_PROGRAM=/usr/bin/make \
-              -DCMAKE_C_COMPILER=/usr/bin/clang-15 \
-              -DCMAKE_TOOLCHAIN_FILE="$REAL_TOOLCHAIN" \
-              -DCMAKE_C_COMPILER_WORKS=1 \
-              -DCMAKE_C_FLAGS="$ALL_INCLUDES" \
-              -DSDK_PATH="$SDK_BASE_DIR" ..
+        # Force compilation through prospero-cmake tool to map linker scripts natively
+        $GITHUB_WORKSPACE/target-sdk/bin/prospero-cmake -DCMAKE_C_COMPILER_WORKS=1 ..
         cmake --build .
 
     - name: Upload Completed Production Packages
