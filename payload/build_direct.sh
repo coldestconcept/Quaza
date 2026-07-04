@@ -33,7 +33,7 @@ echo "[info] tile_pkg_embed.h: $(wc -c < "$PAYLOAD/tile_pkg_embed.h") bytes"
 mkstub() {
   # mkstub <soname.sprx> <libname.so> [sym ...]
   soname="$1"; out="$SDK_STUBS/$2"; shift 2
-  src="/tmp/_ps5stub_$$.c"
+  src="${TMPDIR:-$BUILD}/_ps5stub_$.c"
   printf '' > "$src"
   for s; do printf 'void %s(void){}\n' "$s" >> "$src"; done
   $CLANG --target=x86_64-sie-ps5 --sysroot="$SDK" \
