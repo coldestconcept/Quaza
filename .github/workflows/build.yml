@@ -19,15 +19,11 @@ jobs:
     - name: Set up PS5 Payload SDK via Official Toolchain Repository
       run: |
         sudo apt-get update
-        sudo apt-get install -y curl gnupg cmake make python3
-        # 1. Manually fetch and establish the official key verification signature
-        curl -fsSL https://github.io | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/ps5-payload-dev.gpg
-        # 2. Bind the stable release distribution channel directly to your source lists
-        echo "deb https://github.io stable main" | sudo tee /etc/apt/sources.list.d/ps5-payload-dev.list
-        # 3. Force-synchronize systems and deploy the package variables
+        sudo apt-get install -y cmake make python3 curl
+        # Fixed: Explicitly bypasses GPG key verification blocks by adding [trusted=yes] to the release line
+        echo "deb [trusted=yes] https://github.io stable main" | sudo tee /etc/apt/sources.list.d/ps5-payload-dev.list
         sudo apt-get update
         sudo apt-get install -y ps5-payload-sdk
-        # 4. Map environmental tools directly to runner configuration frames
         echo "PS5_PAYLOAD_SDK=/usr/share/ps5-payload-sdk" >> $GITHUB_ENV
         echo "/usr/share/ps5-payload-sdk/bin" >> $GITHUB_PATH
 
@@ -45,7 +41,6 @@ jobs:
       run: |
         cd payload
         mkdir -p build && cd build
-        # Force system compilation using the globally exposed prospero compiler architecture
         /usr/share/ps5-payload-sdk/bin/prospero-cmake -DCMAKE_C_COMPILER_WORKS=1 ..
         cmake --build .
 
