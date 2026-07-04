@@ -53,8 +53,10 @@ fix_stub() {
 
 echo "==> [0/3] Rebuilding stubs..."
 
-# libkernel.sprx  — POSIX I/O, sockets, pthreads, sceKernel*
-fix_stub libkernel.sprx libkernel.so \
+# libkernel_sys.sprx  — POSIX I/O, sockets, pthreads, sceKernel*
+# PS5 does NOT have a bare libkernel.sprx; firmware ships libkernel_sys.sprx
+# and libkernel_web.sprx.  ELF Arsenal (known-good) uses libkernel_sys.sprx.
+fix_stub libkernel_sys.sprx libkernel_sys.so \
   open close read write lseek dup dup2 \
   stat fstat lstat mkdir rmdir unlink rename chmod fchmod access \
   getpid geteuid getuid gettimeofday clock_gettime \
@@ -145,7 +147,7 @@ $LDLLD -m elf_x86_64 \
   -L"$SDK_STUBS" \
   "$SDK_CRT/crt1.o" \
   $OBJS \
-  -lkernel \
+  -lkernel_sys \
   -lSceLibcInternal \
   -lSceAppInstUtil \
   -lSceSystemService \
