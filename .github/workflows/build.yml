@@ -14,6 +14,7 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
+          # Install lld along with lld-18 for system-wide alias resolution
           sudo apt-get install -y cmake llvm-18 clang-18 lld lld-18 make python3
           
           # Deploy prospero-lld wrapper script pointing to the absolute versioned binary path
@@ -43,9 +44,9 @@ jobs:
           find . -name "*.so" -exec cp {} ./lib/ \;
           cp crt/crt1.o ./lib/
           
-          # Generate and compile the SceLncUtil stub dynamically
+          # Generate and compile the SceLncUtil stub dynamically using correct linker wrapper flags
           echo 'void sceLncUtilLaunchWebBrowser2() {}' > libSceLncUtil.c
-          clang-18 -target x86_64-sie-ps5 -fPIC -shared -soname libSceLncUtil.sprx -o lib/libSceLncUtil.so libSceLncUtil.c
+          clang-18 -target x86_64-sie-ps5 -fPIC -shared -Wl,-soname,libSceLncUtil.sprx -o lib/libSceLncUtil.so libSceLncUtil.c
           
           echo "PS5_PAYLOAD_SDK=$GITHUB_WORKSPACE/target-sdk" >> $GITHUB_ENV
 
