@@ -29,13 +29,12 @@ set(SOURCES
 
 add_executable(quaza_payload.elf ${SOURCES})
 
-# Linker setup: Use SDK linker script and standard freestanding linker constraints
+# Linker setup: Exclude standard libraries
 target_link_options(quaza_payload.elf PRIVATE 
-    "-T" "$ENV{PS5_PAYLOAD_SDK}/linker.x"
     "-nostdlib"
 )
 
-# Explicitly link the runtime initialization (crt1.o) followed by dependencies
+# Explicitly link the runtime initialization (crt1.o) followed by dynamic stubs
 target_link_libraries(quaza_payload.elf PRIVATE
     "$ENV{PS5_PAYLOAD_SDK}/lib/crt1.o"
     kernel
