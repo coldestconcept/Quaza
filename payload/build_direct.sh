@@ -33,12 +33,18 @@ echo "[info] tile_pkg_embed.h: $(wc -c < "$PAYLOAD/tile_pkg_embed.h") bytes"
 #   Rebuilding them ourselves is the only way to get a clean link.
 # =============================================================================
 fix_stub() {
+  # Write stub symbols as x86_64 assembly — avoids clang cross-compile
+  # target detection on Termux (which is aarch64) producing wrong-arch objects.
   soname="$1"; out="$SDK_STUBS/$2"; shift 2
-  src="$TMP/_stub_$$.c"; obj="$TMP/_stub_$$.o"
+  src="$TMP/_stub_$.s"; obj="$TMP/_stub_$.o"
   printf '' > "$src"
-  for s; do printf 'void %s(void){}\n' "$s" >> "$src"; done
-  $CLANG --target=x86_64-sie-ps5 --sysroot="$SDK" \
-    -fPIC -nostdlib -ffreestanding -c "$src" -o "$obj"
+  for s; do
+    # Global function stub: returns 0 (xorq %rax,%rax; retq)
+    printf '.global %s\n.type %s,@function\n%s:\n\txorq %%rax,%%rax\n\tretq\n' \
+      "$s" "$s" "$s" >> "$src"
+  done
+  # -target x86_64: neutral x86_64, no OS ABI assumptions, avoids Termux native target
+  $CLANG -target x86_64 -c -x assembler "$src" -o "$obj"
   $LDLLD -m elf_x86_64 -shared -nostdlib \
     "--soname=$soname" -o "$out" "$obj"
   rm -f "$src" "$obj"
