@@ -9,8 +9,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # Uses the official pre-built Docker environment containing the entire cross-compiler toolchain
-    container: ghcr.io/ps5-payload-dev/sdk:latest
+    # Fixed: Uses the official, verified image repository path with precise version tagging
+    container: ghcr.io/ps5-payload-dev/sdk:v0.3.0
 
     steps:
     - name: Checkout Repository Source Code
@@ -32,7 +32,7 @@ jobs:
       run: |
         cd payload
         mkdir -p build && cd build
-        # Run compiler actions through the container configuration
+        # Run compilation cleanly inside the verified cross-compiler container environment
         prospero-cmake -DCMAKE_C_COMPILER_WORKS=1 ..
         cmake --build .
 
