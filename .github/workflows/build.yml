@@ -17,28 +17,23 @@ jobs:
         path: main-repo
         submodules: recursive
 
-    - name: Checkout SDK Source Framework Natively via API
-      uses: actions/checkout@v4
-      with:
-        repository: ps5-payload-dev/sdk
-        path: target-sdk
-        submodules: recursive
-
-    - name: Deploy Core Cross-Compiler Tools
+    - name: Download Pre-Compiled Production SDK Framework
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake make python3 clang-15 lld-15
-        echo "PS5_PAYLOAD_SDK=$GITHUB_WORKSPACE/target-sdk" >> $GITHUB_ENV
-
-    - name: Pre-Build Official SDK Target Libraries and Links
-      run: |
-        # Fixed: Compiles the base SDK stub libraries first so the static files exist for the linker
-        cd $GITHUB_WORKSPACE/target-sdk
-        mkdir -p build && cd build
-        cmake -DCMAKE_MAKE_PROGRAM=/usr/bin/make \
-              -DCMAKE_C_COMPILER=/usr/bin/clang-15 \
-              -DCMAKE_C_COMPILER_WORKS=1 ..
-        cmake --build . || true
+        sudo apt-get install -y cmake make python3 clang-15 lld-15 curl unzip
+        
+        # Pull down the verified release package containing all pre-compiled .a stubs and headers
+        mkdir -p $GITHUB_WORKSPACE/target-sdk
+        curl -L "https://github.com" -o sdk.zip
+        unzip -o sdk.zip -d $GITHUB_WORKSPACE/target-sdk
+        rm sdk.zip
+        
+        # Locate the unzipped root containing the toolchain files dynamically
+        TRUE_SDK_ROOT=$(find $GITHUB_WORKSPACE/target-sdk -name "ps5-payload-sdk" -type d | head -n 1)
+        if [ -z "$TRUE_SDK_ROOT" ]; then
+            TRUE_SDK_ROOT="$GITHUB_WORKSPACE/target-sdk"
+        fi
+        echo "PS5_PAYLOAD_SDK=$TRUE_SDK_ROOT" >> $GITHUB_ENV
 
     - name: Safeguard Asset Embedding Headers
       run: |
@@ -52,38 +47,20 @@ jobs:
 
     - name: Configure and Execute Toolchain Wrapper Cross-Compilation
       run: |
-        # Auto-detect toolchain blueprints recursively
-        REAL_TOOLCHAIN=$(find $GITHUB_WORKSPACE/target-sdk -name "prospero.cmake" -type f | head -n 1)
-        SDK_BASE_DIR=$(dirname $(dirname "$REAL_TOOLCHAIN"))
-        
-        # Find all include maps and compiled target library library folders
-        ALL_INCLUDES=""
-        for inc_dir in $(find $GITHUB_WORKSPACE/target-sdk -name "include" -type d -o -name "include_common" -type d); do
-            ALL_INCLUDES="$ALL_INCLUDES -I$inc_dir"
-        done
-        
-        STDIO_PATH=$(find $GITHUB_WORKSPACE/target-sdk -name "stdio.h" -type f | head -n 1)
-        if [ ! -z "$STDIO_PATH" ]; then
-            ALL_INCLUDES="$ALL_INCLUDES -I$(dirname "$STDIO_PATH")"
-        fi
-        
-        # Locate the freshly compiled static library folders (.a files)
-        STUB_LIBS=""
-        for lib_dir in $(find $GITHUB_WORKSPACE/target-sdk -name "*.a" -exec dirname {} \; | sort -u); do
-            STUB_LIBS="$STUB_LIBS -L$lib_dir"
-        done
-        
-        export PS5_PAYLOAD_SDK="$SDK_BASE_DIR"
-        
         cd main-repo/payload
         mkdir -p build && cd build
+        
+        # Standardize matching directories using the verified release tree variables
+        REAL_TOOLCHAIN="${{ env.PS5_PAYLOAD_SDK }}/toolchain/prospero.cmake"
+        SDK_TARGET_DIR="${{ env.PS5_PAYLOAD_SDK }}/target"
+        
         cmake -DCMAKE_MAKE_PROGRAM=/usr/bin/make \
               -DCMAKE_C_COMPILER=/usr/bin/clang-15 \
               -DCMAKE_TOOLCHAIN_FILE="$REAL_TOOLCHAIN" \
               -DCMAKE_C_COMPILER_WORKS=1 \
-              -DCMAKE_C_FLAGS="$ALL_INCLUDES" \
-              -DCMAKE_EXE_LINKER_FLAGS="$STUB_LIBS" \
-              -DSDK_PATH="$SDK_BASE_DIR" ..
+              -DCMAKE_C_FLAGS="-I${SDK_TARGET_DIR}/include -I${SDK_TARGET_DIR}/include_common" \
+              -DCMAKE_EXE_LINKER_FLAGS="-L${SDK_TARGET_DIR}/lib -L${SDK_TARGET_DIR}/lib/kstuff_stub" \
+              -DSDK_PATH="$SDK_TARGET_DIR" ..
         cmake --build .
 
     - name: Upload Completed Production Packages
