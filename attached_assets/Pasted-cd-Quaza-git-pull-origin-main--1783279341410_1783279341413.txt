@@ -1,0 +1,16 @@
+cd ~/Quaza                                                  git pull origin main                                                          cd payload
+export PS5_PAYLOAD_SDK=$HOME/target-sdk/ps5-payload-sdk
+make
+remote: Enumerating objects: 9, done.                                         remote: Counting objects: 100% (9/9), done.                                   remote: Compressing objects: 100% (2/2), done.                                remote: Total 6 (delta 3), reused 6 (delta 3), pack-reused 0 (from 0)
+Unpacking objects: 100% (6/6), 3.46 KiB | 295.00 KiB/s, done.
+From https://github.com/coldestconcept/Quaza                                   * branch            main       -> FETCH_HEAD
+   1b0fd23..744b929  main       -> origin/main
+Updating 1b0fd23..744b929                                                     Fast-forward
+ payload/Makefile           |  93 +++++++++++++++++++------------
+ payload/stubs/gen_stubs.sh | 127 +++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 185 insertions(+), 35 deletions(-)                           create mode 100644 payload/stubs/gen_stubs.sh
+[Stub mode] PS5 SDK not found — using generated stubs in stubs/
+Building linker stubs (one-time)...
+Building PS5 stub shared libs...
+  ✓  libSceLibcInternal.so  (SONAME=libSceLibcInternal.sprx)                    ✓  libSceNet.so  (SONAME=libSceNet.sprx)
+  ✓  libkernel.so  (SONAME=libkernel.sprx)                                      ✓  libSceUserService.so  (SONAME=libSceUserService.sprx)                      ✓  libSceSystemService.so  (SONAME=libSceSystemService.sprx)                  ✓  libSceAppInstUtil.so  (SONAME=libSceAppInstUtil.sprx)                                                                                                  All stubs built in payload/stubs/. Run 'make' in payload/ to build the ELF.   clang -target x86_64-sie-ps5  -I. -Icrt -Ilibprosperopkg/include -fPIC -fpie -fno-stack-protector -O2 -Wall -Wno-unused-parameter -Wno-unused-function -c libprosperopkg/src/npdrm.c -o libprosperopkg/src/npdrm.o                        libprosperopkg/src/npdrm.c:1:10: fatal error: 'stdio.h'                             file not found                                                              1 | #include <stdio.h>                                                          |          ^~~~~~~~~                                                    1 error generated.                                                            make: *** [Makefile:122: libprosperopkg/src/npdrm.o] Error 1
