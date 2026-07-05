@@ -42,7 +42,8 @@ else
     # straight C; the PS5-specific ELF layout comes from payload.ld, not the
     # target triple.
     CC_TARGET     := x86_64-linux-gnu
-    SYSROOT_FLAGS :=
+    # Local asm/ shims must come FIRST so they shadow Termux's ARM64 asm/ headers.
+    SYSROOT_FLAGS := -I$(CURDIR)/include
     LIB_FLAGS     := -L$(STUB_DIR)
     STUB_PREREQ   := $(STUB_DIR)/built
     $(info [Stub mode] PS5 SDK not found — using generated stubs in stubs/)
