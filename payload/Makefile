@@ -19,8 +19,7 @@ SDK_TARGET  := $(PS5_PAYLOAD_SDK)/target
 SDK_INCLUDE := $(SDK_TARGET)/include
 SDK_LIB     := $(SDK_TARGET)/lib
 
-CC    := clang
-LD    := ld.lld
+CC := clang
 
 # Cross-compile target (FreeBSD 12, x86-64, PS5 ABI)
 TARGET_TRIPLE := x86_64-sie-ps5
@@ -34,23 +33,30 @@ CFLAGS := \
     -Icrt \
     -Ilibprosperopkg/include \
     -fPIC \
+    -fpie \
     -fno-stack-protector \
     -O2 \
     -Wall \
     -Wno-unused-parameter \
     -Wno-unused-function
 
+# Use clang as the linker driver (not ld.lld directly) so it handles target
+# ABI and relocation model correctly.  Driver flags like -nostartfiles and
+# -Wl,... are then valid.  -fuse-ld=lld makes clang call ld.lld internally.
 LDFLAGS := \
-    -T payload.ld \
+    -target $(TARGET_TRIPLE) \
+    -fuse-ld=lld \
     -nostartfiles \
-    --export-dynamic \
+    -Wl,-T,payload.ld \
+    -Wl,--export-dynamic \
+    -Wl,--gc-sections \
     -L$(SDK_LIB) \
     -lkernel \
     -lSceLibcInternal \
+    -lSceNet \
     -lSceUserService \
     -lSceSystemService \
-    -lSceAppInstUtil \
-    --gc-sections
+    -lSceAppInstUtil
 
 # ── Sources ──────────────────────────────────────────────────────────────────
 
@@ -96,7 +102,7 @@ all: quaza_payload.elf
 	$(CC) $(CFLAGS) -c $< -o $@
 
 quaza_payload.elf: $(OBJS)
-	$(LD) $(OBJS) $(LDFLAGS) -o $@
+	$(CC) $(OBJS) $(LDFLAGS) -o $@
 
 clean:
 	find . -name '*.o' -delete

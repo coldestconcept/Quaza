@@ -75,7 +75,8 @@ target_link_options(quaza_payload.elf PRIVATE
 # runtime via sceKernelLoadStartModule.
 #
 #   libkernel          → sceKernelDlsym, sceKernelSendNotificationRequest, etc.
-#   SceLibcInternal    → printf, malloc, free, pthread_*, socket, etc.
+#   SceLibcInternal    → printf, malloc, free, pthread_*, etc.
+#   SceNet             → socket, bind, listen, accept, getifaddrs, inet_ntop, etc.
 #   SceUserService     → sceUserServiceInitialize
 #   SceSystemService   → sceSystemServiceLaunchApp
 #   SceAppInstUtil     → sceAppInstUtilInitialize, sceAppInstUtilAppInstallPkg,
@@ -84,6 +85,7 @@ target_link_options(quaza_payload.elf PRIVATE
 target_link_libraries(quaza_payload.elf PRIVATE
     kernel
     SceLibcInternal
+    SceNet
     SceUserService
     SceSystemService
     SceAppInstUtil
