@@ -1,0 +1,37 @@
+$ cd ~/Quaza
+git pull origin main
+cd payload
+export PS5_PAYLOAD_SDK=$HOME/target-sdk/ps5-payload-sdk
+make
+remote: Enumerating objects: 28, done.
+remote: Counting objects: 100% (28/28), done.
+remote: Compressing objects: 100% (10/10), done.
+remote: Total 21 (delta 11), reused 21 (delta 11), pack-reused 0 (from 0)
+Unpacking objects: 100% (21/21), 6.37 KiB | 250.00 KiB/s, done.
+From https://github.com/coldestconcept/Quaza
+ * branch            main       -> FETCH_HEAD
+   a5d1d0d..1b0fd23  main       -> origin/main
+Updating a5d1d0d..1b0fd23
+Fast-forward
+ .replit                                           |  34 ++++++
+ ...-and-research-all-three-ques_1783123487704.txt |  67 -----------
+ payload/CMakeLists.txt                            |  92 +++++++++++++++
+ payload/Makefile                                  | 117 ++++++++++++++++++--
+ payload/build.sh                                  |  65 ++++++++---
+ payload/payload.ld                                |   6 +-
+ replit.md                                         |  35 ++++++
+ server.js                                         |  48 ++++++++
+ 8 files changed, 369 insertions(+), 95 deletions(-)                           create mode 100644 .replit
+ delete mode 100644 attached_assets/Pasted-Let-me-look-at-the-codebase-and-research-all-three-ques_1783123487704.txt                                         create mode 100644 replit.md
+ create mode 100644 server.js
+clang -target x86_64-sie-ps5 -isysroot /data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target -I/data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target/include -I/data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target/include/c++/v1 -I. -Icrt -Ilibprosperopkg/include -fPIC -fpie -fno-stack-protector -O2 -Wall -Wno-unused-parameter -Wno-unused-function -c crt/crt.c -o crt/crt.o
+clang: warning: no such sysroot directory: '/data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target' [-Wmissing-sysroot]                         clang -target x86_64-sie-ps5 -isysroot /data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target -I/data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target/include -I/data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target/include/c++/v1 -I. -Icrt -Ilibprosperopkg/include -fPIC -fpie -fno-stack-protector -O2 -Wall -Wno-unused-parameter -Wno-unused-function -c crt/klog.c -o crt/klog.o                                                     clang: warning: no such sysroot directory: '/data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target' [-Wmissing-sysroot]
+clang -target x86_64-sie-ps5 -isysroot /data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target -I/data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target/include -I/data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target/include/c++/v1 -I. -Icrt -Ilibprosperopkg/include -fPIC -fpie -fno-stack-protector -O2 -Wall -Wno-unused-parameter -Wno-unused-function -c crt/kernel.c -o crt/kernel.o
+clang: warning: no such sysroot directory: '/data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target' [-Wmissing-sysroot]
+clang -target x86_64-sie-ps5 -isysroot /data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target -I/data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target/include -I/data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target/include/c++/v1 -I. -Icrt -Ilibprosperopkg/include -fPIC -fpie -fno-stack-protector -O2 -Wall -Wno-unused-parameter -Wno-unused-function -c crt/mdbg.c -o crt/mdbg.o
+clang: warning: no such sysroot directory: '/data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target' [-Wmissing-sysroot]                         clang -target x86_64-sie-ps5 -isysroot /data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target -I/data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target/include -I/data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target/include/c++/v1 -I. -Icrt -Ilibprosperopkg/include -fPIC -fpie -fno-stack-protector -O2 -Wall -Wno-unused-parameter -Wno-unused-function -c crt/patch.c -o crt/patch.o                                                   clang: warning: no such sysroot directory: '/data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target' [-Wmissing-sysroot]
+clang -target x86_64-sie-ps5 -isysroot /data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target -I/data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target/include -I/data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target/include/c++/v1 -I. -Icrt -Ilibprosperopkg/include -fPIC -fpie -fno-stack-protector -O2 -Wall -Wno-unused-parameter -Wno-unused-function -c crt/rtld.c -o crt/rtld.o
+clang: warning: no such sysroot directory: '/data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target' [-Wmissing-sysroot]                         clang -target x86_64-sie-ps5 -isysroot /data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target -I/data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target/include -I/data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target/include/c++/v1 -I. -Icrt -Ilibprosperopkg/include -fPIC -fpie -fno-stack-protector -O2 -Wall -Wno-unused-parameter -Wno-unused-function -c crt/env.c -o crt/env.o                                                       clang: warning: no such sysroot directory: '/data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target' [-Wmissing-sysroot]                         clang -target x86_64-sie-ps5 -isysroot /data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target -I/data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target/include -I/data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target/include/c++/v1 -I. -Icrt -Ilibprosperopkg/include -fPIC -fpie -fno-stack-protector -O2 -Wall -Wno-unused-parameter -Wno-unused-function -c libprosperopkg/src/npdrm.c -o libprosperopkg/src/npdrm.o
+clang: warning: no such sysroot directory: '/data/data/com.termux/files/home/target-sdk/ps5-payload-sdk/target' [-Wmissing-sysroot]                         libprosperopkg/src/npdrm.c:1:10: fatal error: 'stdio.h'
+      file not found                                                              1 | #include <stdio.h>                                                          |          ^~~~~~~~~
+1 error generated.                                                            make: *** [Makefile:102: libprosperopkg/src/npdrm.o] Error 1
