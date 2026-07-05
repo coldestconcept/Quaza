@@ -1,34 +1,52 @@
 # Quaza PS5 Payload — Makefile
 #
-# Builds quaza_payload.elf using the PS5 Payload SDK toolchain.
+# Works in two modes, detected automatically:
 #
-# Usage (from the payload/ directory):
-#   export PS5_PAYLOAD_SDK=$HOME/target-sdk/ps5-payload-sdk
+#   SDK mode  — PS5 Payload SDK installed at $(PS5_PAYLOAD_SDK).
+#               Uses SDK sysroot headers and stub libs.
+#
+#   Stub mode — SDK not found (e.g. bare Termux install).
+#               Builds minimal x86_64 stub .so files in stubs/ then links
+#               against them so the ELF gets correct DT_NEEDED entries.
+#               Run once: bash stubs/gen_stubs.sh   (Makefile does this auto)
+#
+# Usage:
+#   export PS5_PAYLOAD_SDK=$HOME/target-sdk/ps5-payload-sdk  # optional
 #   make
-#
-# The SDK provides:
-#   - clang cross-compiler targeting x86_64-ps5-freebsd12
-#   - Library stubs in $SDK/target/lib/ (creates DT_NEEDED entries)
-#   - Headers in $SDK/target/include/
-#
-# If the SDK is not installed, see docs/BUILD.md.
 
 PS5_PAYLOAD_SDK ?= $(HOME)/target-sdk/ps5-payload-sdk
+SDK_TARGET      := $(PS5_PAYLOAD_SDK)/target
+SDK_INCLUDE     := $(SDK_TARGET)/include
+SDK_LIB         := $(SDK_TARGET)/lib
 
-SDK_TARGET  := $(PS5_PAYLOAD_SDK)/target
-SDK_INCLUDE := $(SDK_TARGET)/include
-SDK_LIB     := $(SDK_TARGET)/lib
+CC             := clang
+TARGET_TRIPLE  := x86_64-sie-ps5
+STUB_DIR       := $(CURDIR)/stubs
 
-CC := clang
+# ── SDK detection ─────────────────────────────────────────────────────────────
+SDK_PRESENT := $(shell test -d "$(SDK_LIB)" && echo yes || echo no)
 
-# Cross-compile target (FreeBSD 12, x86-64, PS5 ABI)
-TARGET_TRIPLE := x86_64-sie-ps5
+ifeq ($(SDK_PRESENT),yes)
+    # ── SDK mode ──────────────────────────────────────────────────────────────
+    SYSROOT_FLAGS := -isysroot $(SDK_TARGET) \
+                     -I$(SDK_INCLUDE) \
+                     -I$(SDK_INCLUDE)/c++/v1
+    LIB_FLAGS     := -L$(SDK_LIB)
+    STUB_PREREQ   :=
+    $(info [SDK mode] Using PS5 Payload SDK at $(PS5_PAYLOAD_SDK))
+else
+    # ── Stub mode ─────────────────────────────────────────────────────────────
+    # No sysroot: clang finds its own built-in stdio.h / stdlib.h etc.
+    SYSROOT_FLAGS :=
+    LIB_FLAGS     := -L$(STUB_DIR)
+    STUB_PREREQ   := $(STUB_DIR)/built
+    $(info [Stub mode] PS5 SDK not found — using generated stubs in stubs/)
+endif
 
+# ── Compile flags ─────────────────────────────────────────────────────────────
 CFLAGS := \
     -target $(TARGET_TRIPLE) \
-    -isysroot $(SDK_TARGET) \
-    -I$(SDK_INCLUDE) \
-    -I$(SDK_INCLUDE)/c++/v1 \
+    $(SYSROOT_FLAGS) \
     -I. \
     -Icrt \
     -Ilibprosperopkg/include \
@@ -40,9 +58,9 @@ CFLAGS := \
     -Wno-unused-parameter \
     -Wno-unused-function
 
-# Use clang as the linker driver (not ld.lld directly) so it handles target
-# ABI and relocation model correctly.  Driver flags like -nostartfiles and
-# -Wl,... are then valid.  -fuse-ld=lld makes clang call ld.lld internally.
+# ── Link flags ────────────────────────────────────────────────────────────────
+# Use clang as the linker driver (not raw ld.lld) — driver flags like
+# -nostartfiles and -fuse-ld= are then valid.
 LDFLAGS := \
     -target $(TARGET_TRIPLE) \
     -fuse-ld=lld \
@@ -50,7 +68,7 @@ LDFLAGS := \
     -Wl,-T,payload.ld \
     -Wl,--export-dynamic \
     -Wl,--gc-sections \
-    -L$(SDK_LIB) \
+    $(LIB_FLAGS) \
     -lkernel \
     -lSceLibcInternal \
     -lSceNet \
@@ -58,8 +76,7 @@ LDFLAGS := \
     -lSceSystemService \
     -lSceAppInstUtil
 
-# ── Sources ──────────────────────────────────────────────────────────────────
-
+# ── Sources ───────────────────────────────────────────────────────────────────
 CRT_SRCS := \
     crt/crt.c \
     crt/klog.c \
@@ -88,15 +105,18 @@ PAYLOAD_SRCS := \
 ALL_SRCS := $(CRT_SRCS) $(LIBPKG_SRCS) $(PAYLOAD_SRCS)
 OBJS     := $(ALL_SRCS:.c=.o)
 
-# ── Rules ────────────────────────────────────────────────────────────────────
+# ── Rules ─────────────────────────────────────────────────────────────────────
+.PHONY: all clean stubs
 
-.PHONY: all clean
-
-all: quaza_payload.elf
+all: $(STUB_PREREQ) quaza_payload.elf
 	@echo ""
 	@echo "✓ Built quaza_payload.elf"
-	@file quaza_payload.elf || true
-	@size quaza_payload.elf || true
+	@readelf -d quaza_payload.elf 2>/dev/null | grep NEEDED || true
+
+# Build stubs if they haven't been generated yet
+$(STUB_DIR)/built:
+	@echo "Building linker stubs (one-time)..."
+	@bash $(STUB_DIR)/gen_stubs.sh
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -105,5 +125,8 @@ quaza_payload.elf: $(OBJS)
 	$(CC) $(OBJS) $(LDFLAGS) -o $@
 
 clean:
-	find . -name '*.o' -delete
+	find . -name '*.o' -not -path './stubs/*' -delete
 	rm -f quaza_payload.elf
+
+stubs:
+	bash $(STUB_DIR)/gen_stubs.sh
