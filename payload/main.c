@@ -88,8 +88,8 @@ static const char *usb_log_init(void) {
     return NULL;   /* no writable path found — output goes to elfldr only */
 }
 
-int main(int argc, char **argv) {
-    (void)argc; (void)argv;
+int main(int argc, char **argv, char **envp) {
+    (void)argc; (void)argv; (void)envp;
 
     /* ── 0. USB log — do this before ANYTHING else ───────────────────── */
     usb_log_init();

@@ -1,12 +1,23 @@
 #!/bin/sh
 # build_direct.sh — Quaza PS5 payload direct build (no cmake)
+#
+# Root-cause fix (2025-07):
+#   ps5-payload-elfldr does NOT do dynamic linking for injected ELFs.
+#   It only handles R_X86_64_RELATIVE relocations, then jumps to e_entry.
+#   The SDK's crt/ layer (_start → __rtld_init) uses payload_args->sceKernelDlsym
+#   to resolve every PLT/GOT entry before calling main(). Without it, every
+#   imported function call immediately segfaults.
+#
+#   Fix: compile sdk/crt/*.c into the payload, use ENTRY(_start) in the
+#   linker script, and stub SONAMEs must be .so (not .sprx) so rtld_open()
+#   can find them in the name→handle table.
+
 set -e
 
 PAYLOAD="$(cd "$(dirname "$0")" && pwd)"
 SDK="$HOME/ps5-payload-sdk"
 SDK_STUBS="$SDK/sce_stubs"
 SDK_CRT="$SDK/crt"
-SDK_LIBC="$SDK/libc"
 BUILD="$PAYLOAD/build_direct"
 CLANG="clang"
 LDLLD="ld.lld"
@@ -20,78 +31,75 @@ fi
 echo "[info] tile_pkg_embed.h: $(wc -c < "$PAYLOAD/tile_pkg_embed.h") bytes"
 
 # =============================================================================
-# fix_stub <soname.sprx> <out_libname.so> [sym ...]
+# fix_stub <soname.so> <out_libname.so> [sym ...]
 #
-# Rebuilds a stub shared library with the correct SONAME and the listed
-# exported symbols.  Two-step (clang -c then ld.lld -shared) avoids Termux's
-# broken clang-as-linker invocation.
+# Builds a link-time stub .so with the correct SONAME.
+# SONAMEs MUST end in .so (not .sprx): rtld_open() matches against .so names
+# in its special-case table (libkernel_sys.so → libkernel handle,
+# libSceLibcInternal.so → handle 0x2) and in sysmodtab[].
+# At runtime the real .sprx on PS5 provides the implementation.
 #
-# Why we rebuild ALL six stubs here instead of relying on SDK originals:
-#   The ps5-payload-dev/sdk git main now ships empty stubs (no exported
-#   symbols).  The linker needs each symbol defined in *some* stub at link
-#   time; at runtime the real .sprx on PS5 provides the implementation.
-#   Rebuilding them ourselves is the only way to get a clean link.
+# Stub bodies are empty (just a label) — identical to john-tornblom's SDK
+# stubs. The linker generates PLT/GOT entries; rtld resolves them at runtime.
 # =============================================================================
 fix_stub() {
-  # Write stub symbols as x86_64 assembly — avoids clang cross-compile
-  # target detection on Termux (which is aarch64) producing wrong-arch objects.
   soname="$1"; out="$SDK_STUBS/$2"; shift 2
-  src="$TMP/_stub_$.s"; obj="$TMP/_stub_$.o"
+  src="$TMP/_stub_$$.c"
   printf '' > "$src"
   for s; do
-    # Global function stub: returns 0 (xorq %rax,%rax; retq)
-    printf '.global %s\n.type %s,@function\n%s:\n\txorq %%rax,%%rax\n\tretq\n' \
+    printf 'asm(".global %s\\n.type %s @function\\n%s:\\n");\n' \
       "$s" "$s" "$s" >> "$src"
   done
-  # -target x86_64: neutral x86_64, no OS ABI assumptions, avoids Termux native target
-  $CLANG -target x86_64 -c -x assembler "$src" -o "$obj"
+  # Compile as neutral x86_64 (avoids Termux aarch64 native-target issue)
+  $CLANG -target x86_64 -c -ffreestanding -fno-builtin -nostdlib \
+    -fPIC -fno-plt -o "$TMP/_stub_$$.o" "$src"
   $LDLLD -m elf_x86_64 -shared -nostdlib \
-    "--soname=$soname" -o "$out" "$obj"
-  rm -f "$src" "$obj"
+    "--soname=$soname" -o "$out" "$TMP/_stub_$$.o"
+  rm -f "$src" "$TMP/_stub_$$.o"
   echo "  stub $soname"
 }
 
-echo "==> [0/3] Rebuilding stubs..."
-# Library layout verified against pldmgr, game-compressor, elf-arsenal:
-#   ALL three have: libkernel_web.sprx + libSceNet.sprx + libSceLibcInternal.sprx
-#   elf-arsenal also adds libkernel_sys.sprx (we do too for sceKernel* funcs)
-#   NONE have libSceSysmodule.sprx — excluded
+echo "==> [0/4] Rebuilding stubs..."
+# SONAMEs are .so — rtld_open() special-cases libkernel*.so → libkernel handle
+#                   and libSceLibcInternal.so → handle 0x2
 
-# libkernel_sys.sprx — sceKernel* notification/info + POSIX fd I/O + pthreads + dir
-fix_stub libkernel_sys.sprx libkernel_sys.so \
+# libkernel_sys.so — rtld maps to libkernel handle (0x1 or 0x2001)
+fix_stub libkernel_sys.so libkernel_sys.so \
   open close read write lseek dup dup2 \
   stat fstat lstat mkdir rmdir unlink rename chmod fchmod access \
   getpid geteuid getuid gettimeofday clock_gettime \
   usleep sleep time signal \
   opendir readdir closedir \
+  socket connect bind listen accept send recv sendto recvfrom \
+  setsockopt getsockopt getsockname getpeername \
+  getifaddrs freeifaddrs \
   pthread_create pthread_join pthread_detach pthread_exit \
   pthread_mutex_init pthread_mutex_lock pthread_mutex_unlock pthread_mutex_destroy \
   pthread_cond_init pthread_cond_wait pthread_cond_signal \
   pthread_cond_broadcast pthread_cond_destroy \
   pthread_self pthread_attr_init pthread_attr_destroy pthread_attr_setstacksize \
-  sceKernelSendNotificationRequest sceKernelGetAppInfo sceKernelUsleep
-
-# libkernel_web.sprx — present in ALL three reference payloads
-fix_stub libkernel_web.sprx libkernel_web.so \
   sceKernelSendNotificationRequest sceKernelGetAppInfo sceKernelUsleep \
-  open close read write lseek dup dup2 \
-  stat fstat lstat mkdir rmdir unlink rename chmod fchmod access \
-  getpid gettimeofday clock_gettime usleep sleep time signal \
-  opendir readdir closedir \
+  sceKernelLoadStartModule sceKernelStopUnloadModule sceKernelDlsym \
+  sceKernelSpawn
+
+# libkernel_web.so — rtld also maps to libkernel handle
+fix_stub libkernel_web.so libkernel_web.so \
+  sceKernelSendNotificationRequest sceKernelGetAppInfo sceKernelUsleep \
+  sceKernelLoadStartModule sceKernelStopUnloadModule sceKernelDlsym \
+  open close read write lseek \
+  getpid gettimeofday usleep sleep \
   pthread_create pthread_join pthread_detach pthread_exit \
   pthread_mutex_init pthread_mutex_lock pthread_mutex_unlock pthread_mutex_destroy \
-  pthread_cond_init pthread_cond_wait pthread_cond_signal \
-  pthread_cond_broadcast pthread_cond_destroy \
   pthread_self pthread_attr_init pthread_attr_destroy pthread_attr_setstacksize
 
-# libSceNet.sprx — sockets + network interfaces; present in ALL three reference payloads
-fix_stub libSceNet.sprx libSceNet.so \
+# libSceNet.so — rtld: sysmodtab ID 0x8000001c, loaded via sceKernelLoadStartModule
+fix_stub libSceNet.so libSceNet.so \
   socket connect bind listen accept send recv sendto recvfrom \
   setsockopt getsockopt getsockname getpeername \
   getifaddrs freeifaddrs
 
-# libSceLibcInternal.sprx — full libc; present in ALL three reference payloads
-fix_stub libSceLibcInternal.sprx libSceLibcInternal.so \
+# libSceLibcInternal.so — rtld maps to handle 0x2 (full libc)
+fix_stub libSceLibcInternal.so libSceLibcInternal.so \
   printf fprintf snprintf sprintf vfprintf vprintf vsnprintf \
   puts fputs fputc fgetc fgets fflush \
   fopen fclose fread fwrite fseek fseeko ftell ftello \
@@ -104,37 +112,74 @@ fix_stub libSceLibcInternal.sprx libSceLibcInternal.so \
   strtol strtoll strtoul strtoull strtod strtok atoi atol atof \
   isalpha isalnum isspace isdigit isupper islower isxdigit isprint iscntrl \
   toupper tolower \
-  strerror perror getcwd getenv asprintf \
+  strerror perror getcwd getenv setenv asprintf \
   __error __isthreaded \
   __stderrp __stdinp __stdoutp \
-  __inet_ntop __inet_pton __inet_addr __inet_aton \
-  in6addr_any
+  __inet_ntop __inet_pton
 
-# libSceUserService.sprx
-fix_stub libSceUserService.sprx libSceUserService.so \
+# libSceUserService.so — rtld: sysmodtab ID 0x80000011
+fix_stub libSceUserService.so libSceUserService.so \
   sceUserServiceInitialize sceUserServiceFinalize sceUserServiceGetForegroundUser
 
-# libSceSystemService.sprx
-fix_stub libSceSystemService.sprx libSceSystemService.so \
+# libSceSystemService.so — rtld: sysmodtab ID 0x80000010
+fix_stub libSceSystemService.so libSceSystemService.so \
   sceSystemServiceInitialize sceSystemServiceLaunchApp \
   sceSystemServiceLaunchWebBrowser sceSystemServiceParamGetString
 
-# libSceAppInstUtil.sprx
-fix_stub libSceAppInstUtil.sprx libSceAppInstUtil.so \
+# libSceAppInstUtil.so — rtld: sysmodtab ID 0x80000014
+fix_stub libSceAppInstUtil.so libSceAppInstUtil.so \
   sceAppInstUtilInitialize sceAppInstUtilAppInstallPkg \
   sceAppInstUtilAppRecover sceAppInstUtilAppUnInstall sceAppInstUtilGetAppInfo
 
 # =============================================================================
-# [1/3] Compile
+# [1/4] Compile CRT layer (SDK startup: _start, rtld, klog, kernel, patch, env)
+#
+# The crt/ files provide:
+#   _start()     — ELF entry called by elfldr; clears .bss, calls __rtld_init,
+#                  then calls main()
+#   __rtld_init  — walks _DYNAMIC, loads DT_NEEDED libs via sceKernelDlsym +
+#                  sceKernelLoadStartModule, patches all R_X86_64_GLOB_DAT /
+#                  R_X86_64_JMP_SLOT GOT entries
+#   klog_*       — kernel log helpers (visible in /dev/klog, readable via klogsrv)
+#   kernel_*     — kernel R/W helpers via rw_pair sockets (from payload_args)
+#   patch_*      — patches kernel ucred caps, enables ptrace
+#   env_*        — parses envp into setenv() calls
 # =============================================================================
-CFLAGS="--target=x86_64-sie-ps5 --sysroot=$SDK \
+CRT_CFLAGS="--target=x86_64-sie-ps5 \
   -isystem $SDK/include -isystem $SDK/include/freebsd \
-  -I$PAYLOAD -I$PAYLOAD/libprosperopkg/include \
+  -I$PAYLOAD/crt \
+  -O0 -g -std=gnu11 -ffreestanding -fno-builtin -nostdlib \
+  -fPIC -fno-plt -fno-stack-protector \
+  -Wall -Wno-unused-function"
+
+echo "==> [1/4] Compiling CRT layer..."
+CRT_OBJS=""
+for src in "$PAYLOAD/crt/crt.c" \
+           "$PAYLOAD/crt/rtld.c" \
+           "$PAYLOAD/crt/klog.c" \
+           "$PAYLOAD/crt/kernel.c" \
+           "$PAYLOAD/crt/mdbg.c" \
+           "$PAYLOAD/crt/patch.c" \
+           "$PAYLOAD/crt/env.c"; do
+  [ -f "$src" ] || { echo "  [warn] missing $src — skip"; continue; }
+  base=$(basename "$src" .c)
+  obj="$BUILD/crt_${base}.o"
+  echo "  cc crt/$base.c"
+  $CLANG $CRT_CFLAGS -c "$src" -o "$obj"
+  CRT_OBJS="$CRT_OBJS $obj"
+done
+
+# =============================================================================
+# [2/4] Compile payload sources
+# =============================================================================
+CFLAGS="--target=x86_64-sie-ps5 \
+  -isystem $SDK/include -isystem $SDK/include/freebsd \
+  -I$PAYLOAD -I$PAYLOAD/crt -I$PAYLOAD/libprosperopkg/include \
   -O2 -std=gnu11 -ffreestanding -fno-builtin -nostdlib \
   -fPIC -fno-plt -fno-stack-protector \
   -Wall -Wno-incompatible-pointer-types"
 
-echo "==> [1/3] Compiling..."
+echo "==> [2/4] Compiling payload sources..."
 OBJS=""
 for src in "$PAYLOAD"/*.c "$PAYLOAD"/libprosperopkg/src/*.c; do
   [ -f "$src" ] || continue
@@ -146,18 +191,20 @@ for src in "$PAYLOAD"/*.c "$PAYLOAD"/libprosperopkg/src/*.c; do
 done
 
 # =============================================================================
-# [2/3] Link
+# [3/4] Link
+#
+# CRT objects go FIRST so _start is found before main.
+# Linker script (payload.ld) is the SDK's elf_x86_64.x with ENTRY(_start).
+# No -z max-page-size: SDK uses CONSTANT(MAXPAGESIZE) = 4096 (x86_64 FreeBSD).
+# Stub library names must match the SONAME we set above (.so extension).
 # =============================================================================
-echo "==> [2/3] Linking..."
-# libc.a is NOT listed here: it is an import-stub archive whose printf.o etc.
-# fight with our comprehensive dynamic stubs and cause "undefined symbol" errors.
-# All libc symbols resolve at runtime from libSceLibcInternal.sprx (DT_NEEDED).
+echo "==> [3/4] Linking..."
 $LDLLD -m elf_x86_64 \
   --sysroot="$SDK" \
   -pie \
-  -z max-page-size=0x4000 \
   -T "$PAYLOAD/payload.ld" \
   -L"$SDK_STUBS" \
+  $CRT_OBJS \
   $OBJS \
   -lkernel_sys \
   -lkernel_web \
@@ -169,6 +216,9 @@ $LDLLD -m elf_x86_64 \
   --allow-shlib-undefined \
   -o "$BUILD/quaza_payload.elf"
 
-echo "==> [3/3] Done!"
+echo "==> [4/4] Done!"
 echo "  ELF: $BUILD/quaza_payload.elf"
 ls -lh "$BUILD/quaza_payload.elf"
+echo ""
+echo "  Program headers (expect: 4 PT_LOADs + PT_DYNAMIC):"
+readelf -l "$BUILD/quaza_payload.elf" 2>/dev/null | grep -E 'LOAD|DYNAMIC|Type|Entry' || true

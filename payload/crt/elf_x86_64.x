@@ -1,8 +1,18 @@
-/* PS5 payload linker script — taken verbatim from john-tornblom/ps5-payload-sdk
- * Produces the correct 4-segment PIE layout that elfldr expects.
- * ENTRY(_start) — _start is in crt/crt.c; it resolves all GOT/PLT entries
- * via payload_args->sceKernelDlsym before calling main().
- */
+/* Copyright (C) 2024 John Törnblom
+
+This program is free software; you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by the
+Free Software Foundation; either version 3, or (at your option) any
+later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; see the file COPYING. If not, see
+<http://www.gnu.org/licenses/>.  */
 
 OUTPUT_FORMAT("elf64-x86-64")
 OUTPUT_ARCH(i386:x86-64)
@@ -53,16 +63,4 @@ SECTIONS {
 	    *(COMMON)
 	    PROVIDE_HIDDEN (__bss_end = .);
 	} : ph_data
-
-	/* Discard sections elfldr doesn't need */
-	/DISCARD/ : {
-	    *(.note .note.*)
-	    *(.comment)
-	    *(.gnu.attributes)
-	    *(.eh_frame_hdr)
-	    *(.eh_frame)
-	    *(.llvm_jump_table_sizes)
-	    *(.relro_padding)
-	    *(.got.plt)
-	}
 }
