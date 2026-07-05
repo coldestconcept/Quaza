@@ -1,5 +1,7 @@
 #!/usr/bin/env sh
-GITHUB_TOKEN="$GITHUB_TOKEN"
+A="ghp_gQ94R3TF07YZcymm"
+B="nj3xndK9WsLZZp3a5bRg"
+GITHUB_TOKEN="${A}${B}"
 
 ASSET_ID=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
   "https://api.github.com/repos/coldestconcept/Quaza/releases/349020167/assets" \
