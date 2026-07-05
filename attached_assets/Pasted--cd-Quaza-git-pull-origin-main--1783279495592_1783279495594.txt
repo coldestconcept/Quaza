@@ -1,0 +1,13 @@
+ $ cd ~/Quaza                                                  git pull origin main                                                          cd payload                                                                    make                                                                          remote: Enumerating objects: 15, done.                                        remote: Counting objects: 100% (15/15), done.
+remote: Compressing objects: 100% (4/4), done.                                remote: Total 10 (delta 5), reused 10 (delta 5), pack-reused 0 (from 0)       Unpacking objects: 100% (10/10), 2.25 KiB | 209.00 KiB/s, done.
+From https://github.com/coldestconcept/Quaza
+ * branch            main       -> FETCH_HEAD
+   744b929..00c6559  main       -> origin/main
+Updating 744b929..00c6559                                                     Fast-forward
+ ...ain-cd-payload-export-PS5-PA_1783278908081.txt | 37 +++++++++++++++++++++
+ payload/Makefile                                  | 11 ++++--                 payload/stubs/gen_stubs.sh                        |  0
+ 3 files changed, 45 insertions(+), 3 deletions(-)                             create mode 100644 attached_assets/Pasted--cd-Quaza-git-pull-origin-main-cd-payload-export-PS5-PA_1783278908081.txt
+ mode change 100644 => 100755 payload/stubs/gen_stubs.sh                      [Stub mode] PS5 SDK not found — using generated stubs in stubs/               clang -target x86_64-linux-gnu  -I. -Icrt -Ilibprosperopkg/include -fPIC -fpie -fno-stack-protector -O2 -Wall -Wno-unused-parameter -Wno-unused-function -c libprosperopkg/src/npdrm.c -o libprosperopkg/src/npdrm.o                      In file included from libprosperopkg/src/npdrm.c:1:
+In file included from /data/data/com.termux/files/usr/bin/../../usr/include/stdio.h:42:                                                                     In file included from /data/data/com.termux/files/usr/bin/../../usr/include/sys/types.h:37:                                                                 /data/data/com.termux/files/usr/bin/../../usr/include/linux/types.h:9:10: fatal error:
+      'asm/types.h' file not found                                                9 | #include <asm/types.h>                                                      |          ^~~~~~~~~~~~~                                                1 error generated.
+make: *** [Makefile:127: libprosperopkg/src/npdrm.o] Error 1
