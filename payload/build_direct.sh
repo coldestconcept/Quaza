@@ -158,7 +158,6 @@ $LDLLD -m elf_x86_64 \
   -z max-page-size=0x4000 \
   -T "$PAYLOAD/payload.ld" \
   -L"$SDK_STUBS" \
-  "$SDK_CRT/crt1.o" \
   $OBJS \
   -lkernel_sys \
   -lkernel_web \

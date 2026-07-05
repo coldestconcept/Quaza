@@ -10,7 +10,7 @@
  * No PT_PHDR, no PT_GNU_STACK, no PT_GNU_RELRO — elfldr does not expect them.
  */
 
-ENTRY(_start)
+ENTRY(main)
 
 PHDRS {
     text  PT_LOAD    FLAGS(0x7);   /* RWE */
@@ -27,7 +27,6 @@ SECTIONS {
      * The 16 KB gap (0x0000–0x3FFF) holds the ELF + program headers.
      */
     .text 0x0 : ALIGN(0x4000) {
-        *(.text.start)
         *(.text .text.*)
     } :text
 
