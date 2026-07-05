@@ -54,15 +54,15 @@ SECTIONS {
 	    PROVIDE_HIDDEN (__bss_end = .);
 	} : ph_data
 
-	/* Discard sections elfldr doesn't need */
+	/* .got and .got.plt must NOT be discarded — rtld_load() patches
+	 * R_X86_64_GLOB_DAT and R_X86_64_JMP_SLOT entries that live there. */
+	.got : { *(.got .got.*) } : ph_data
+
 	/DISCARD/ : {
 	    *(.note .note.*)
 	    *(.comment)
 	    *(.gnu.attributes)
-	    *(.eh_frame_hdr)
-	    *(.eh_frame)
 	    *(.llvm_jump_table_sizes)
 	    *(.relro_padding)
-	    *(.got.plt)
 	}
 }
