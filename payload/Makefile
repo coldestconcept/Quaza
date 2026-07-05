@@ -28,6 +28,7 @@ SDK_PRESENT := $(shell test -d "$(SDK_LIB)" && echo yes || echo no)
 
 ifeq ($(SDK_PRESENT),yes)
     # ── SDK mode ──────────────────────────────────────────────────────────────
+    CC_TARGET     := $(TARGET_TRIPLE)
     SYSROOT_FLAGS := -isysroot $(SDK_TARGET) \
                      -I$(SDK_INCLUDE) \
                      -I$(SDK_INCLUDE)/c++/v1
@@ -36,7 +37,11 @@ ifeq ($(SDK_PRESENT),yes)
     $(info [SDK mode] Using PS5 Payload SDK at $(PS5_PAYLOAD_SDK))
 else
     # ── Stub mode ─────────────────────────────────────────────────────────────
-    # No sysroot: clang finds its own built-in stdio.h / stdlib.h etc.
+    # Use x86_64-linux-gnu so clang finds the host's stdio.h / stdlib.h.
+    # The generated x86_64 machine code is identical to x86_64-sie-ps5 for
+    # straight C; the PS5-specific ELF layout comes from payload.ld, not the
+    # target triple.
+    CC_TARGET     := x86_64-linux-gnu
     SYSROOT_FLAGS :=
     LIB_FLAGS     := -L$(STUB_DIR)
     STUB_PREREQ   := $(STUB_DIR)/built
@@ -45,7 +50,7 @@ endif
 
 # ── Compile flags ─────────────────────────────────────────────────────────────
 CFLAGS := \
-    -target $(TARGET_TRIPLE) \
+    -target $(CC_TARGET) \
     $(SYSROOT_FLAGS) \
     -I. \
     -Icrt \
@@ -62,7 +67,7 @@ CFLAGS := \
 # Use clang as the linker driver (not raw ld.lld) — driver flags like
 # -nostartfiles and -fuse-ld= are then valid.
 LDFLAGS := \
-    -target $(TARGET_TRIPLE) \
+    -target $(CC_TARGET) \
     -fuse-ld=lld \
     -nostartfiles \
     -Wl,-T,payload.ld \
