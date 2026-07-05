@@ -1,19 +1,56 @@
 #!/bin/bash
+# Quaza PS5 Payload — build script
+#
+# Two methods:
+#   1. CMake (recommended, uses the SDK toolchain file)
+#   2. Direct make (fallback — set PS5_PAYLOAD_SDK and run `make` in payload/)
+#
+# Prerequisites:
+#   - PS5 Payload SDK installed (https://github.com/ps5-payload-dev/sdk)
+#   - clang + ld.lld available on PATH
+#   - CMake 3.2+  (for method 1)
+#
+# Termux one-liner to install dependencies:
+#   pkg install clang cmake lld
 
-# 1. Clear old build configurations
-rm -rf build && mkdir build && cd build
+set -e
 
-# 2. Hardcode the absolute paths to map directly to the toolchain script parameters
-export PS5_PAYLOAD_SDK="$HOME/target-sdk/ps5-payload-sdk"
-REAL_TOOLCHAIN="${PS5_PAYLOAD_SDK}/toolchain/prospero.cmake"
-SDK_TARGET_DIR="${PS5_PAYLOAD_SDK}/target"
-STDIO_DIR="${PS5_PAYLOAD_SDK}/target/include_common"
+# ── SDK path ─────────────────────────────────────────────────────────────────
+# Override with:  PS5_PAYLOAD_SDK=/your/path ./build.sh
+PS5_PAYLOAD_SDK="${PS5_PAYLOAD_SDK:-$HOME/target-sdk/ps5-payload-sdk}"
 
-# 3. Configure the pure cross-compilation pipeline utilizing the modern SDK system variables
-cmake -DCMAKE_TOOLCHAIN_FILE="$REAL_TOOLCHAIN" \
-      -DPS5_PAYLOAD_SDK="$PS5_PAYLOAD_SDK" \
-      -DCMAKE_C_COMPILER_WORKS=1 \
-      -DCMAKE_C_FLAGS="-I${SDK_TARGET_DIR}/include -I$STDIO_DIR" ..
+if [ ! -d "$PS5_PAYLOAD_SDK" ]; then
+    echo "ERROR: PS5 Payload SDK not found at $PS5_PAYLOAD_SDK"
+    echo "Install it:"
+    echo "  git clone https://github.com/ps5-payload-dev/sdk.git"
+    echo "  cd sdk && make && make DESTDIR=$PS5_PAYLOAD_SDK install"
+    exit 1
+fi
 
-# 4. Fire up the compiler engine execution
-cmake --build .
+TOOLCHAIN="$PS5_PAYLOAD_SDK/toolchain/prospero.cmake"
+if [ ! -f "$TOOLCHAIN" ]; then
+    echo "ERROR: Toolchain file not found: $TOOLCHAIN"
+    exit 1
+fi
+
+export PS5_PAYLOAD_SDK
+
+# ── Build ─────────────────────────────────────────────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+BUILD_DIR="$SCRIPT_DIR/../build"
+
+rm -rf "$BUILD_DIR"
+mkdir -p "$BUILD_DIR"
+cd "$BUILD_DIR"
+
+cmake \
+    -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" \
+    -DPS5_PAYLOAD_SDK="$PS5_PAYLOAD_SDK" \
+    -DCMAKE_BUILD_TYPE=Release \
+    "$SCRIPT_DIR"
+
+cmake --build . -- -j"$(nproc 2>/dev/null || echo 2)"
+
+echo ""
+echo "✓ Build complete: build/quaza_payload.elf"
+file quaza_payload.elf 2>/dev/null || true

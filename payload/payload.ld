@@ -55,8 +55,10 @@ SECTIONS {
 	} : ph_data
 
 	/* .got and .got.plt must NOT be discarded — rtld_load() patches
-	 * R_X86_64_GLOB_DAT and R_X86_64_JMP_SLOT entries that live there. */
-	.got : { *(.got .got.*) } : ph_data
+	 * R_X86_64_GLOB_DAT and R_X86_64_JMP_SLOT entries that live there.
+	 * Both sections MUST be in the writable ph_data segment.            */
+	.got     : { *(.got .got.*)         } : ph_data
+	.got.plt : { *(.got.plt .got.plt.*) } : ph_data
 
 	/DISCARD/ : {
 	    *(.note .note.*)
