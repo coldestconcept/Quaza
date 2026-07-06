@@ -54,11 +54,14 @@ make_stub() {
 
 echo "Building PS5 stub shared libs..."
 
-# ── libSceLibcInternal.sprx — standard C library ──────────────────────────────
-make_stub libSceLibcInternal libSceLibcInternal.sprx \
+# ── libSceLibcInternal.so — standard C library ────────────────────────────────
+# SONAME must end in .so — rtld.c strips last 2 chars and appends "sprx".
+# libSceLibcInternal.so is special-cased in rtld.c → handle 0x2 directly.
+# errno is NOT a global on PS5/BSD; use __error() → *__error() indirection.
+make_stub libSceLibcInternal libSceLibcInternal.so \
     printf fprintf sprintf snprintf vprintf vfprintf vsnprintf \
     fflush perror puts fopen fclose fread fwrite ftell fseek rewind \
-    fgets fputs fputc fgetc feof ferror clearerr sscanf \
+    fgets fputs fputc fgetc feof ferror clearerr sscanf fdopen fileno \
     malloc calloc realloc free \
     atoi atol atof strtol strtoul strtoll strtoull strtod \
     exit abort qsort bsearch abs labs rand srand getenv setenv unsetenv \
@@ -85,10 +88,10 @@ make_stub libSceLibcInternal libSceLibcInternal.sprx \
     clock_gettime \
     isdigit isxdigit isalpha isalnum isupper islower isspace ispunct \
     isprint iscntrl toupper tolower \
-    errno
+    __error
 
-# ── libSceNet.sprx — networking ───────────────────────────────────────────────
-make_stub libSceNet libSceNet.sprx \
+# ── libSceNet.so — networking ─────────────────────────────────────────────────
+make_stub libSceNet libSceNet.so \
     socket bind listen accept connect \
     send recv sendto recvfrom \
     setsockopt getsockopt shutdown select poll \
@@ -97,26 +100,27 @@ make_stub libSceNet libSceNet.sprx \
     htons htonl ntohs ntohl \
     getaddrinfo freeaddrinfo gethostbyname
 
-# ── libkernel.sprx — PS5 kernel (only symbols not handled by the CRT) ─────────
-make_stub libkernel libkernel.sprx \
+# ── libkernel.so — PS5 kernel ─────────────────────────────────────────────────
+# Special-cased in rtld.c: uses libkernel_handle directly, no .so→.sprx transform.
+make_stub libkernel libkernel.so \
     sceKernelSendNotificationRequest \
     sceKernelDlsym \
     sceKernelLoadStartModule \
     sceKernelStopUnloadModule \
     getpid
 
-# ── libSceUserService.sprx ────────────────────────────────────────────────────
-make_stub libSceUserService libSceUserService.sprx \
+# ── libSceUserService.so ──────────────────────────────────────────────────────
+make_stub libSceUserService libSceUserService.so \
     sceUserServiceInitialize \
     sceUserServiceTerminate
 
-# ── libSceSystemService.sprx ──────────────────────────────────────────────────
-make_stub libSceSystemService libSceSystemService.sprx \
+# ── libSceSystemService.so ────────────────────────────────────────────────────
+make_stub libSceSystemService libSceSystemService.so \
     sceSystemServiceLaunchApp \
     sceSystemServiceGetStatus
 
-# ── libSceAppInstUtil.sprx ────────────────────────────────────────────────────
-make_stub libSceAppInstUtil libSceAppInstUtil.sprx \
+# ── libSceAppInstUtil.so ──────────────────────────────────────────────────────
+make_stub libSceAppInstUtil libSceAppInstUtil.so \
     sceAppInstUtilInitialize \
     sceAppInstUtilAppInstallPkg \
     sceAppInstUtilAppRecover \

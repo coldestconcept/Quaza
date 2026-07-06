@@ -2,7 +2,10 @@
 #ifndef _ERRNO_H_STUB
 #define _ERRNO_H_STUB
 
-extern int errno;
+/* PS5/FreeBSD uses __error() indirection — errno is NOT a global symbol.
+ * libSceLibcInternal.sprx exports __error; rtld resolves it via GLOB_DAT. */
+int *__error(void);
+#define errno (*__error())
 
 #define EPERM           1
 #define ENOENT          2

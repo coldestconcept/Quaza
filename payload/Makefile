@@ -46,6 +46,10 @@ else
     # -isystem adds clang's own resource-dir headers (stdint.h, stddef.h, etc.).
     # -I adds our minimal hand-written system headers.
     CLANG_BUILTINS := $(shell $(CC) -print-resource-dir 2>/dev/null)/include
+    ifeq ($(wildcard $(CLANG_BUILTINS)/stddef.h),)
+        $(error Stub mode: clang resource headers not found at $(CLANG_BUILTINS). \
+            Install clang on Termux: pkg install clang)
+    endif
     SYSROOT_FLAGS := -nostdinc \
                      -isystem $(CLANG_BUILTINS) \
                      -I$(CURDIR)/include
