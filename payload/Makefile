@@ -42,8 +42,13 @@ else
     # straight C; the PS5-specific ELF layout comes from payload.ld, not the
     # target triple.
     CC_TARGET     := x86_64-linux-gnu
-    # Local asm/ shims must come FIRST so they shadow Termux's ARM64 asm/ headers.
-    SYSROOT_FLAGS := -I$(CURDIR)/include
+    # -nostdinc stops clang from ever touching Termux's ARM64 bionic headers.
+    # -isystem adds clang's own resource-dir headers (stdint.h, stddef.h, etc.).
+    # -I adds our minimal hand-written system headers.
+    CLANG_BUILTINS := $(shell $(CC) -print-resource-dir 2>/dev/null)/include
+    SYSROOT_FLAGS := -nostdinc \
+                     -isystem $(CLANG_BUILTINS) \
+                     -I$(CURDIR)/include
     LIB_FLAGS     := -L$(STUB_DIR)
     STUB_PREREQ   := $(STUB_DIR)/built
     $(info [Stub mode] PS5 SDK not found — using generated stubs in stubs/)
