@@ -47,8 +47,8 @@ else
     # -I adds our minimal hand-written system headers.
     CLANG_BUILTINS := $(shell $(CC) -print-resource-dir 2>/dev/null)/include
     ifeq ($(wildcard $(CLANG_BUILTINS)/stddef.h),)
-        $(error Stub mode: clang resource headers not found at $(CLANG_BUILTINS). \
-            Install clang on Termux: pkg install clang)
+    $(error Stub mode: clang resource headers not found at $(CLANG_BUILTINS). \
+    Install clang on Termux: pkg install clang)
     endif
     SYSROOT_FLAGS := -nostdinc \
                      -isystem $(CLANG_BUILTINS) \
@@ -125,24 +125,24 @@ OBJS     := $(ALL_SRCS:.c=.o)
 .PHONY: all clean stubs
 
 all: $(STUB_PREREQ) quaza_payload.elf
-        @echo ""
-        @echo "✓ Built quaza_payload.elf"
-        @readelf -d quaza_payload.elf 2>/dev/null | grep NEEDED || true
+	@echo ""
+	@echo "✓ Built quaza_payload.elf"
+	@readelf -d quaza_payload.elf 2>/dev/null | grep NEEDED || true
 
 # Build stubs if they haven't been generated yet
 $(STUB_DIR)/built:
-        @echo "Building linker stubs (one-time)..."
-        @bash $(STUB_DIR)/gen_stubs.sh
+	@echo "Building linker stubs (one-time)..."
+	@bash $(STUB_DIR)/gen_stubs.sh
 
 %.o: %.c
-        $(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
 quaza_payload.elf: $(OBJS)
-        $(CC) $(OBJS) $(LDFLAGS) -o $@
+	$(CC) $(OBJS) $(LDFLAGS) -o $@
 
 clean:
-        find . -name '*.o' -not -path './stubs/*' -delete
-        rm -f quaza_payload.elf
+	find . -name '*.o' -not -path './stubs/*' -delete
+	rm -f quaza_payload.elf
 
 stubs:
-        bash $(STUB_DIR)/gen_stubs.sh
+	bash $(STUB_DIR)/gen_stubs.sh
