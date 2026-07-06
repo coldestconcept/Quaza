@@ -28,6 +28,8 @@ cat > $D/asm/posix_types.h << 'HEOF'
 typedef unsigned long    __kernel_ulong_t;
 typedef long             __kernel_long_t;
 typedef long             __kernel_suseconds_t;
+typedef long long        __kernel_time64_t;
+typedef long             __kernel_old_time_t;
 typedef __kernel_ulong_t __kernel_size_t;
 typedef __kernel_long_t  __kernel_ssize_t;
 typedef __kernel_long_t  __kernel_ptrdiff_t;
@@ -159,6 +161,21 @@ cat > $D/asm-generic/errno.h << 'HEOF'
 #define ETIMEDOUT 110 #define ECONNREFUSED 111 #define EHOSTUNREACH 113
 #define EALREADY 114  #define EINPROGRESS 115 #define ECANCELED 125
 #define EOWNERDEAD 130 #define ENOTRECOVERABLE 131
+#endif
+HEOF
+
+# ── asm/sigcontext.h ─────────────────────────────────────────────────────────
+cat > $D/asm/sigcontext.h << 'HEOF'
+#ifndef _ASM_SIGCONTEXT_H_STUB
+#define _ASM_SIGCONTEXT_H_STUB
+#include <asm/types.h>
+struct sigcontext {
+  __u64 r8,r9,r10,r11,r12,r13,r14,r15;
+  __u64 rdi,rsi,rbp,rbx,rdx,rax,rcx,rsp,rip,eflags;
+  __u16 cs,gs,fs,ss;
+  __u64 err,trapno,oldmask,cr2,fpstate;
+  __u64 reserved[8];
+};
 #endif
 HEOF
 
