@@ -1,6 +1,7 @@
-*.elf
+attached_assets/
 *.o
-__pycache__/
-*.pyc
-.DS_Store
-.env
+*.so
+*.elf
+stubs/built
+stubs/libSce*.so
+stubs/libkernel.so
