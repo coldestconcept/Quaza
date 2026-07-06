@@ -4,6 +4,7 @@
 
 typedef unsigned long    __kernel_ulong_t;
 typedef long             __kernel_long_t;
+typedef long             __kernel_suseconds_t;
 typedef __kernel_ulong_t __kernel_size_t;
 typedef __kernel_long_t  __kernel_ssize_t;
 typedef __kernel_long_t  __kernel_ptrdiff_t;
