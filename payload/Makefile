@@ -129,9 +129,10 @@ all: $(STUB_PREREQ) quaza_payload.elf
 	@echo "✓ Built quaza_payload.elf"
 	@readelf -d quaza_payload.elf 2>/dev/null | grep NEEDED || true
 
-# Build stubs if they haven't been generated yet
-$(STUB_DIR)/built:
-	@echo "Building linker stubs (one-time)..."
+# Build stubs if they haven't been generated yet, or if gen_stubs.sh changed
+# since the last build (avoids linking against stale stub .so files).
+$(STUB_DIR)/built: $(STUB_DIR)/gen_stubs.sh
+	@echo "Building linker stubs..."
 	@bash $(STUB_DIR)/gen_stubs.sh
 
 %.o: %.c
