@@ -23,6 +23,11 @@ make_stub() {
     shift 2
     local syms=("$@")
 
+    # Symbols that are data (variables), not functions — must be emitted as
+    # .data entries with GLOB_DAT relocations, not function stubs, or the
+    # linker/rtld will treat them as callable code.
+    local data_syms="errno stdin stdout stderr"
+
     local asm_file="${name}.s"
     {
         printf '.text\n'
@@ -32,20 +37,27 @@ make_stub() {
         printf '\\n: xor %%eax,%%eax; ret\n'
         printf '.endm\n\n'
         for sym in "${syms[@]}"; do
-            printf 'stub %s\n' "$sym"
+            if [[ " $data_syms " != *" $sym "* ]]; then
+                printf 'stub %s\n' "$sym"
+            fi
         done
-        # errno is a global int variable, not a function
-        if [[ " ${syms[*]} " == *" errno "* ]]; then
-            : # handled below
-        fi
     } > "$asm_file"
 
-    # errno needs to be a .data symbol, not a function stub
-    # (replace the function stub line with a proper .data entry)
-    if [[ " ${syms[*]} " == *" errno "* ]]; then
-        sed -i 's/^stub errno$//' "$asm_file"
-        printf '\n.data\n.global errno\nerrno: .long 0\n' >> "$asm_file"
-    fi
+    # Data symbols (errno, stdin, stdout, stderr) need a proper .data entry
+    # instead of a function stub — errno is a 4-byte int, the FILE* globals
+    # are pointer-sized (8 bytes on x86_64).
+    {
+        printf '\n.data\n'
+        for sym in "${syms[@]}"; do
+            if [[ " $data_syms " == *" $sym "* ]]; then
+                if [[ "$sym" == "errno" ]]; then
+                    printf '.global %s\n%s: .long 0\n' "$sym" "$sym"
+                else
+                    printf '.global %s\n%s: .quad 0\n' "$sym" "$sym"
+                fi
+            fi
+        done
+    } >> "$asm_file"
 
     $STUB_CC -Wl,-soname,"$soname" -o "${name}.so" "$asm_file"
     rm -f "$asm_file"
@@ -88,7 +100,7 @@ make_stub libSceLibcInternal libSceLibcInternal.so \
     clock_gettime \
     isdigit isxdigit isalpha isalnum isupper islower isspace ispunct \
     isprint iscntrl toupper tolower \
-    __error
+    __error stdin stdout stderr
 
 # ── libSceNet.so — networking ─────────────────────────────────────────────────
 make_stub libSceNet libSceNet.so \
