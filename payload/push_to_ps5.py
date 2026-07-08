@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-push_to_ps5.py — send the freshly built quaza_payload.elf to a PS5 running
-                 ps5-payload-elfldr, then stream back all stdout/stderr output
-                 printed by the running payload.
+push_to_ps5.py — send quaza_payload.elf to a PS5 running ps5-payload-elfldr,
+                 then listen for UDP netlog datagrams broadcast by the payload.
 
-elfldr listens on TCP port 9021 (by default) and expects:
-    1. The ELF size as an 8-byte little-endian unsigned integer.
-    2. The raw ELF bytes.
-It loads the ELF into memory, executes it, and pipes its stdout/stderr back
-over the same TCP connection until the payload exits.
+Protocol:
+  - Send the raw ELF bytes, then close the write side (SHUT_WR).
+  - elfldr reads until EOF, loads and runs the ELF.
+  - The payload broadcasts every NL_LOG() line as a UDP datagram to
+    255.255.255.255:9020.  This script listens on :9020 in the background
+    and prints those lines in real time.
 
 Usage:
     python3 payload/push_to_ps5.py <ps5-ip> [elf-path] [port]
@@ -17,17 +17,6 @@ Examples:
     python3 payload/push_to_ps5.py 192.168.1.50
     python3 payload/push_to_ps5.py 192.168.1.50 payload/quaza_payload.elf
     python3 payload/push_to_ps5.py 192.168.1.50 payload/quaza_payload.elf 9021
-
-While the connection is open you will see every printf/fprintf call from the
-running payload in real time.  Hit Ctrl-C to disconnect (the payload keeps
-running on the PS5).
-
-UDP netlog (secondary channel)
-───────────────────────────────
-The payload also broadcasts each NL_LOG() line as a UDP datagram to port 9020
-on 255.255.255.255.  To receive those in a second terminal:
-
-    nc -ul 9020
 """
 
 import os
@@ -43,18 +32,17 @@ DEFAULT_ELF     = os.path.join(os.path.dirname(__file__), "quaza_payload.elf")
 NETLOG_UDP_PORT = 9020
 
 
-# ── UDP netlog listener (optional second channel) ─────────────────────────────
+# ── UDP netlog listener ───────────────────────────────────────────────────────
 
 def _udp_listener(stop_event: threading.Event) -> None:
-    """Listen for UDP broadcast datagrams from the payload and print them."""
+    """Receive UDP broadcast datagrams from the payload and print them."""
     sock = None
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind(("", NETLOG_UDP_PORT))
         sock.settimeout(0.5)
-        print(f"[netlog] Listening for UDP datagrams on :{NETLOG_UDP_PORT} …",
-              flush=True)
+        print(f"[netlog] Listening on UDP :{NETLOG_UDP_PORT} …", flush=True)
         while not stop_event.is_set():
             try:
                 data, addr = sock.recvfrom(4096)
@@ -63,7 +51,7 @@ def _udp_listener(stop_event: threading.Event) -> None:
             except socket.timeout:
                 pass
     except OSError as e:
-        print(f"[netlog] Could not open UDP :{NETLOG_UDP_PORT}: {e}", flush=True)
+        print(f"[netlog] Could not bind UDP :{NETLOG_UDP_PORT}: {e}", flush=True)
     finally:
         if sock is not None:
             sock.close()
@@ -89,12 +77,12 @@ def main() -> int:
         elf_bytes = f.read()
     size = len(elf_bytes)
 
-    # Start UDP listener thread so we capture netlog output even before the
-    # TCP connection is fully established.
+    # Start UDP listener before connecting so we don't miss early boot messages.
     stop_evt = threading.Event()
     udp_thread = threading.Thread(target=_udp_listener, args=(stop_evt,),
                                   daemon=True)
     udp_thread.start()
+    time.sleep(0.1)  # give the thread time to bind
 
     print(f"==> Connecting to {ps5_ip}:{port} (elfldr) …", flush=True)
     try:
@@ -102,67 +90,49 @@ def main() -> int:
     except (ConnectionRefusedError, OSError) as e:
         print(f"ERROR: could not reach elfldr at {ps5_ip}:{port}: {e}",
               file=sys.stderr)
-        print("Make sure elfldr is running on the PS5 and both devices are "
-              "on the same network.", file=sys.stderr)
         stop_evt.set()
         return 1
 
     try:
-        # Send ELF
         print(f"==> Sending {elf_path} ({size:,} bytes) …", flush=True)
-        sock.sendall(struct.pack("<Q", size))
         sock.sendall(elf_bytes)
+        sock.shutdown(socket.SHUT_WR)   # EOF — tells elfldr the ELF is complete
 
-        # Signal end-of-send so elfldr knows we are done uploading.
-        # Half-close the write side; elfldr will then start executing the ELF
-        # and piping its stdout/stderr back.
-        sock.shutdown(socket.SHUT_WR)
-
-        print("==> ELF sent — streaming payload output (Ctrl-C to stop) …\n",
+        # Drain any bytes elfldr sends back (e.g. status lines)
+        print("==> ELF sent. Waiting for UDP log (Ctrl-C to stop) …\n",
               flush=True)
-
-        # Stream back whatever elfldr sends (payload stdout + stderr)
         sock.setblocking(False)
         buf = b""
         while True:
             try:
                 ready, _, _ = select.select([sock], [], [], 0.2)
             except KeyboardInterrupt:
-                print("\n[push] Disconnected (payload still running on PS5).",
-                      flush=True)
                 break
-
             if ready:
                 try:
                     chunk = sock.recv(4096)
                 except OSError:
                     chunk = b""
-
                 if not chunk:
-                    # Flush any partial line that didn't end with \n
                     if buf:
                         print(buf.decode("utf-8", errors="replace"), flush=True)
-                        buf = b""
-                    print("\n[push] Connection closed by PS5 (payload exited or "
-                          "elfldr disconnected).", flush=True)
+                    print("[TCP closed by PS5]", flush=True)
                     break
-
                 buf += chunk
-                # Print complete lines immediately; hold partial lines
                 while b"\n" in buf:
                     line, buf = buf.split(b"\n", 1)
-                    print(line.decode("utf-8", errors="replace"), flush=True)
+                    print(f"[TCP] {line.decode('utf-8', errors='replace')}",
+                          flush=True)
 
     except KeyboardInterrupt:
         print("\n[push] Disconnected.", flush=True)
     finally:
         sock.close()
 
-    # TCP pipe closed but the payload keeps running — stay alive so the
-    # UDP netlog thread keeps printing.  Press Ctrl-C to quit.
+    # Keep UDP listener alive after TCP closes — payload keeps running.
     if not stop_evt.is_set():
-        print("[push] TCP closed. Payload still running — UDP log active. "
-              "Press Ctrl-C to exit.", flush=True)
+        print("[push] TCP closed. UDP log still active — press Ctrl-C to exit.",
+              flush=True)
         try:
             while True:
                 time.sleep(1)

@@ -1,4 +1,9 @@
-/* sys/socket.h — minimal stub for Termux cross-compilation (-nostdinc mode) */
+/* sys/socket.h — FreeBSD/PS5 constants for Termux cross-compilation (-nostdinc mode)
+ *
+ * FreeBSD values — NOT Linux.  The PS5 runs Orbis OS (FreeBSD-derived).
+ * Linux and FreeBSD differ substantially for SOL_SOCKET, SO_*, AF_INET6,
+ * MSG_* etc.  Wrong values silently cause setsockopt/bind/send to fail.
+ */
 #ifndef _SYS_SOCKET_H_STUB
 #define _SYS_SOCKET_H_STUB
 
@@ -48,38 +53,51 @@ int      shutdown(int sockfd, int how);
 int      getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
 int      getpeername(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
 
+/* socket type — same on FreeBSD and Linux */
 #define SOCK_STREAM    1
 #define SOCK_DGRAM     2
 #define SOCK_RAW       3
-#define SOCK_NONBLOCK  0x800
-#define SOCK_CLOEXEC   0x80000
 
+/* address families — AF_INET6 differs! Linux=10, FreeBSD=28 */
 #define AF_UNSPEC  0
 #define AF_UNIX    1
 #define AF_INET    2
-#define AF_INET6   10
+#define AF_INET6   28   /* FreeBSD/PS5 */
 #define PF_INET    AF_INET
 #define PF_INET6   AF_INET6
 
-#define SOL_SOCKET    1
-#define SO_REUSEADDR  2
-#define SO_TYPE       3
-#define SO_ERROR      4
-#define SO_BROADCAST  6
-#define SO_SNDBUF     7
-#define SO_RCVBUF     8
-#define SO_KEEPALIVE  9
-#define SO_REUSEPORT  15
-#define SO_RCVTIMEO   20
-#define SO_SNDTIMEO   21
+/* SOL_SOCKET: Linux=1, FreeBSD=0xffff */
+#define SOL_SOCKET    0xffff
+
+/* SO_* options: FreeBSD uses bitmask style, very different from Linux */
+#define SO_DEBUG      0x0001
+#define SO_ACCEPTCONN 0x0002
+#define SO_REUSEADDR  0x0004  /* Linux=2,  FreeBSD=0x0004 */
+#define SO_KEEPALIVE  0x0008  /* Linux=9,  FreeBSD=0x0008 */
+#define SO_DONTROUTE  0x0010
+#define SO_BROADCAST  0x0020  /* Linux=6,  FreeBSD=0x0020 */
+#define SO_LINGER     0x0080
+#define SO_OOBINLINE  0x0100
+#define SO_REUSEPORT  0x0200  /* Linux=15, FreeBSD=0x0200 */
+#define SO_NOSIGPIPE  0x0800
+#define SO_TYPE       0x1008  /* Linux=3,  FreeBSD=0x1008 */
+#define SO_ERROR      0x1007  /* Linux=4,  FreeBSD=0x1007 */
+#define SO_SNDBUF     0x1001  /* Linux=7,  FreeBSD=0x1001 */
+#define SO_RCVBUF     0x1002  /* Linux=8,  FreeBSD=0x1002 */
+#define SO_SNDLOWAT   0x1003
+#define SO_RCVLOWAT   0x1004
+#define SO_SNDTIMEO   0x1005  /* Linux=21, FreeBSD=0x1005 */
+#define SO_RCVTIMEO   0x1006  /* Linux=20, FreeBSD=0x1006 */
 
 #define SHUT_RD    0
 #define SHUT_WR    1
 #define SHUT_RDWR  2
 
-#define MSG_OOB       1
-#define MSG_PEEK      2
-#define MSG_DONTWAIT  64
-#define MSG_NOSIGNAL  0x4000
+/* MSG_* flags — MSG_DONTWAIT and MSG_NOSIGNAL differ */
+#define MSG_OOB       0x0001
+#define MSG_PEEK      0x0002
+#define MSG_DONTROUTE 0x0004
+#define MSG_DONTWAIT  0x0080  /* Linux=0x40,   FreeBSD=0x80 */
+#define MSG_NOSIGNAL  0x20000 /* Linux=0x4000, FreeBSD=0x20000 */
 
 #endif
