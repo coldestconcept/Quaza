@@ -73,36 +73,125 @@ payload_get_args(void) {
 }
 
 
+/* ── early_notify ────────────────────────────────────────────────────────────
+ * Fire a PS5 on-screen toast at any point in startup — even before rtld runs.
+ *
+ * Uses ONLY:
+ *   - args->sceKernelDlsym (a function pointer from elfldr, always valid)
+ *   - Stack-allocated data (no globals, no string literals needing RELATIVE
+ *     relocations — safe for both ET_EXEC and ET_DYN before rtld_load)
+ *
+ * step codes:
+ *   0 = _start entered (CRT alive)
+ *   1 = pre_init: getpid dlsym failed (both handles)
+ *   2 = pre_init: __isthreaded dlsym failed
+ *   3 = pre_init: __klog_init returned
+ *   4 = pre_init: __kernel_init returned
+ *   5 = pre_init: __rtld_init returned  (rc=0 → OK, rc!=0 → failed)
+ *   6 = _start: reached main()
+ */
+static void
+early_notify(payload_args_t *args, int step, int rc)
+{
+  /* SceNotificationRequest — matches browser_launch.c definition exactly.
+   * Defined inline so this file needs no extra headers. */
+  typedef struct {
+    int  type;
+    int  req_id;
+    int  priority;
+    int  msg_id;
+    int  target_id;
+    int  user_id;
+    int  unk1;
+    int  unk2;
+    char icon_uri[1024];
+    char message[1024];
+  } SceNotifReq;
+
+  int (*p_notify)(int, SceNotifReq*, long, int) = 0;
+
+  /* Try handle 0x1 (libkernel), fall back to 0x2001. */
+  if (args->sceKernelDlsym(0x1, "sceKernelSendNotificationRequest", &p_notify))
+    args->sceKernelDlsym(0x2001, "sceKernelSendNotificationRequest", &p_notify);
+  if (!p_notify)
+    return;
+
+  /* Zero the struct manually — memset not available before rtld. */
+  SceNotifReq req;
+  {
+    char *p = (char *)&req;
+    long  n = (long)sizeof(req);
+    while (n--) *p++ = 0;
+  }
+
+  req.type      = 0;
+  req.target_id = -1;
+
+  /* Build message on the stack: "Quaza sN rc=0xXXXXXXXX"
+   * No string literals — every character is a direct assignment. */
+  char *m = req.message;
+  /* "Quaza s" */
+  m[0]='Q'; m[1]='u'; m[2]='a'; m[3]='z'; m[4]='a';
+  m[5]=' '; m[6]='s';
+  /* step digit(s) */
+  m[7] = '0' + (char)(step % 10);
+  /* " rc=0x" */
+  m[8]=' '; m[9]='r'; m[10]='c'; m[11]='='; m[12]='0'; m[13]='x';
+  /* 8 hex digits of rc */
+  int j = 14;
+  for (int shift = 28; shift >= 0; shift -= 4) {
+    int nib = ((unsigned int)rc >> shift) & 0xf;
+    m[j++] = nib < 10 ? '0' + nib : 'a' + nib - 10;
+  }
+  m[j] = '\0';
+
+  p_notify(0, &req, (long)sizeof(req), 0);
+}
+
+
 static int
 pre_init(payload_args_t *args) {
   int *__isthreaded;
   int error = 0;
 
   payload_args = args;
+
+  /* ── step 1: get syscall ptr from libkernel ─────────────────────── */
   if(args->sceKernelDlsym(0x1, "getpid", &ptr_syscall)) {
     if((error=args->sceKernelDlsym(0x2001, "getpid", &ptr_syscall))) {
+      early_notify(args, 1, error);
       return error;
     }
   }
+  ptr_syscall += 0xa;   /* jump to the actual syscall insn inside getpid */
 
-  // jump directly to the syscall instruction
-  // in getpid (provided by libkernel)
-  ptr_syscall += 0xa;
-
+  /* ── step 2: thread flag ────────────────────────────────────────── */
   if((error=args->sceKernelDlsym(0x2, "__isthreaded", &__isthreaded))) {
+    early_notify(args, 2, error);
     return error;
   }
   *__isthreaded = 1;
 
+  /* ── step 3: klog ───────────────────────────────────────────────── */
   if((error=__klog_init(args))) {
+    early_notify(args, 3, error);
     return error;
   }
+  early_notify(args, 3, 0);   /* klog OK */
+
+  /* ── step 4: kernel patches (non-fatal on unknown firmware) ─────── */
   if((error=__kernel_init(args))) {
+    early_notify(args, 4, error);
     return error;
   }
+  early_notify(args, 4, 0);   /* kernel OK */
+
+  /* ── step 5: dynamic linker (loads DT_NEEDED .sprx files) ──────── */
   if((error=__rtld_init(args))) {
+    early_notify(args, 5, error);
     return error;
   }
+  early_notify(args, 5, 0);   /* rtld OK — main() will run next */
 
   return 0;
 }
@@ -134,10 +223,13 @@ void
 _start(payload_args_t *args, int argc, char* argv[], char* envp[]) {
   unsigned long count = 0;
 
-  // Clear .bss section.
+  /* Clear .bss section. */
   for(unsigned char* bss=__bss_start; bss<__bss_end; bss++) {
     *bss = 0;
   }
+
+  /* Probe 0: CRT is alive, args pointer is valid. */
+  early_notify(args, 0, 0);
 
   *args->payloadout = 0;
   if((*args->payloadout=pre_init(args))) {
@@ -145,16 +237,19 @@ _start(payload_args_t *args, int argc, char* argv[], char* envp[]) {
     return;
   }
 
-  // Run .init functions.
+  /* Probe 6: main() about to run. */
+  early_notify(args, 6, 0);
+
+  /* Run .init functions. */
   count = __init_array_end - __init_array_start;
   for(int i=0; i<count; i++) {
     __init_array_start[i](args, argc, argv, envp);
   }
 
-  // Run the actual payload
+  /* Run the actual payload. */
   *args->payloadout = main(argc, argv, envp);
 
-  // Run .fini functions.
+  /* Run .fini functions. */
   count = __fini_array_end - __fini_array_start;
   for(int i=0; i<count; i++) {
     __fini_array_start[count-i-1]();
