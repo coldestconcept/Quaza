@@ -71,7 +71,8 @@ CFLAGS := \
     -O2 \
     -Wall \
     -Wno-unused-parameter \
-    -Wno-unused-function
+    -Wno-unused-function \
+    -MMD -MP
 
 # ── Link flags ────────────────────────────────────────────────────────────────
 # Use clang as the linker driver (not raw ld.lld) — driver flags like
@@ -120,6 +121,11 @@ PAYLOAD_SRCS := \
 
 ALL_SRCS := $(CRT_SRCS) $(LIBPKG_SRCS) $(PAYLOAD_SRCS)
 OBJS     := $(ALL_SRCS:.c=.o)
+DEPS     := $(ALL_SRCS:.c=.d)
+
+# Auto-generated header dependency files — silently included so changes to
+# any .h automatically trigger recompilation of every .c that includes it.
+-include $(DEPS)
 
 # ── Rules ─────────────────────────────────────────────────────────────────────
 .PHONY: all clean stubs
@@ -143,6 +149,7 @@ quaza_payload.elf: $(OBJS)
 
 clean:
 	find . -name '*.o' -not -path './stubs/*' -delete
+	find . -name '*.d' -not -path './stubs/*' -delete
 	rm -f quaza_payload.elf
 
 stubs:
