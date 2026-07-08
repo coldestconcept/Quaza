@@ -33,3 +33,4 @@ See `docs/BUILD.md` and `docs/INSTALL.md` for full instructions.
 ## User preferences
 
 - Keep existing project structure; do not restructure or migrate.
+- Push changes to GitHub (origin/main) after every set of changes.
