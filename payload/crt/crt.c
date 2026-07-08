@@ -223,13 +223,16 @@ void
 _start(payload_args_t *args, int argc, char* argv[], char* envp[]) {
   unsigned long count = 0;
 
+  /* Probe 0: very first thing — before BSS clear.
+   * If the ELF is ET_DYN loaded at non-zero base, __bss_start/__bss_end
+   * hold wrong link-time VMAs and the clear loop corrupts memory.
+   * Firing the probe here tells us whether _start is even being called. */
+  early_notify(args, 0, 0);
+
   /* Clear .bss section. */
   for(unsigned char* bss=__bss_start; bss<__bss_end; bss++) {
     *bss = 0;
   }
-
-  /* Probe 0: CRT is alive, args pointer is valid. */
-  early_notify(args, 0, 0);
 
   *args->payloadout = 0;
   if((*args->payloadout=pre_init(args))) {
