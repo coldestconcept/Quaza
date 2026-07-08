@@ -288,8 +288,11 @@ __kernel_init(payload_args_t* args) {
     break;
 
   default:
-    klog_printf("Unknown firmware 0x%x\n", kernel_get_fw_version());
-    return -1;
+    klog_printf("Unknown firmware 0x%x — skipping kernel offset setup (elfldr already jailbroke us)\n",
+                kernel_get_fw_version());
+    /* Don't return -1: elfldr has already elevated the process; our own
+     * kernel r/w is nice-to-have but not required for HTTP serving. */
+    break;
   }
 
   return 0;
@@ -313,12 +316,12 @@ kernel_write(unsigned long addr, unsigned long *data) {
   victim_buf[2] = 0;
 
   if(syscall(SYS_setsockopt, MASTER_SOCK, IPPROTO_IPV6, IPV6_PKTINFO,
-	     victim_buf, 0x14)) {
+             victim_buf, 0x14)) {
     return -1;
   }
 
   if(syscall(SYS_setsockopt, VICTIM_SOCK, IPPROTO_IPV6, IPV6_PKTINFO,
-	     data, 0x14)) {
+             data, 0x14)) {
     return -1;
   }
 
@@ -428,7 +431,7 @@ kernel_get_proc(int pid) {
 
   while(addr) {
     if(kernel_copyout(addr + KERNEL_OFFSET_PROC_P_PID, &other_pid,
-		      sizeof(other_pid))) {
+                      sizeof(other_pid))) {
       return 0;
     }
 
@@ -469,7 +472,7 @@ kernel_dynlib_obj(int pid, unsigned int handle, dynlib_obj_t* obj) {
     }
 
     if(kernel_copyout(kaddr + __builtin_offsetof(dynlib_obj_t, handle),
-		      &obj->handle, sizeof(obj->handle)) < 0) {
+                      &obj->handle, sizeof(obj->handle)) < 0) {
       return -1;
     }
   } while(obj->handle != handle);
@@ -591,7 +594,7 @@ kernel_get_proc_ucred(int pid) {
   }
 
   if(kernel_copyout(proc + KERNEL_OFFSET_PROC_P_UCRED, &ucred,
-		    sizeof(ucred))) {
+                    sizeof(ucred))) {
     return 0;
   }
 
@@ -609,7 +612,7 @@ kernel_get_ucred_authid(int pid) {
   }
 
   if(kernel_copyout(ucred + KERNEL_OFFSET_UCRED_CR_SCEAUTHID, &authid,
-		    sizeof(authid))) {
+                    sizeof(authid))) {
     return 0;
   }
 
@@ -626,7 +629,7 @@ kernel_set_ucred_authid(int pid, unsigned long authid) {
   }
 
   if(kernel_copyin(&authid, ucred + KERNEL_OFFSET_UCRED_CR_SCEAUTHID,
-		   sizeof(authid))) {
+                   sizeof(authid))) {
     return -1;
   }
 
@@ -676,7 +679,7 @@ kernel_get_ucred_attrs(int pid) {
   }
 
   if(kernel_copyout(ucred + KERNEL_OFFSET_UCRED_CR_SCEATTRS, &attrs,
-		    sizeof(attrs))) {
+                    sizeof(attrs))) {
     return 0;
   }
 
@@ -693,7 +696,7 @@ kernel_set_ucred_attrs(int pid, unsigned long attrs) {
   }
 
   if(kernel_copyin(&attrs, ucred + KERNEL_OFFSET_UCRED_CR_SCEATTRS,
-		   sizeof(attrs))) {
+                   sizeof(attrs))) {
     return -1;
   }
 
@@ -710,7 +713,7 @@ kernel_set_ucred_uid(int pid, unsigned int uid) {
   }
 
   if(kernel_copyin(&uid, ucred + KERNEL_OFFSET_UCRED_CR_UID,
-		   sizeof(uid))) {
+                   sizeof(uid))) {
     return -1;
   }
 
@@ -727,7 +730,7 @@ kernel_set_ucred_ruid(int pid, unsigned int ruid) {
   }
 
   if(kernel_copyin(&ruid, ucred + KERNEL_OFFSET_UCRED_CR_RUID,
-		   sizeof(ruid))) {
+                   sizeof(ruid))) {
     return -1;
   }
 
@@ -744,7 +747,7 @@ kernel_set_ucred_svuid(int pid, unsigned int svuid) {
   }
 
   if(kernel_copyin(&svuid, ucred + KERNEL_OFFSET_UCRED_CR_SVUID,
-		   sizeof(svuid))) {
+                   sizeof(svuid))) {
     return -1;
   }
 
@@ -761,7 +764,7 @@ kernel_set_ucred_rgid(int pid, unsigned int rgid) {
   }
 
   if(kernel_copyin(&rgid, ucred + KERNEL_OFFSET_UCRED_CR_RGID,
-		   sizeof(rgid))) {
+                   sizeof(rgid))) {
     return -1;
   }
 
@@ -778,7 +781,7 @@ kernel_set_ucred_svgid(int pid, unsigned int svgid) {
   }
 
   if(kernel_copyin(&svgid, ucred + KERNEL_OFFSET_UCRED_CR_SVGID,
-		   sizeof(svgid))) {
+                   sizeof(svgid))) {
     return -1;
   }
 
@@ -796,7 +799,7 @@ kernel_get_proc_filedesc(int pid) {
   }
 
   if(kernel_copyout(proc + KERNEL_OFFSET_PROC_P_FD, &filedesc,
-		    sizeof(filedesc))) {
+                    sizeof(filedesc))) {
     return 0;
   }
 
@@ -825,7 +828,7 @@ kernel_get_proc_file(int pid, int fd) {
   }
 
   if(kernel_copyout(fd_files + 8 + (0x30 * fd),
-		    &fde_file, sizeof(fde_file))) {
+                    &fde_file, sizeof(fde_file))) {
     return 0;
   }
 
@@ -855,7 +858,7 @@ kernel_get_proc_inp6_outputopts(int pid, int fd) {
   }
 
   if(kernel_copyout(so_pcb + 0x120, &inp6_outputopts,
-		    sizeof(inp6_outputopts))) {
+                    sizeof(inp6_outputopts))) {
     return 0;
   }
 
@@ -899,7 +902,7 @@ kernel_overlap_sockets(int pid, int master_sock, int victim_sock) {
   }
 
   if(!(master_inp6_outputopts=kernel_get_proc_inp6_outputopts(pid,
-							      master_sock))) {
+                                                              master_sock))) {
     return -1;
   }
 
@@ -908,13 +911,13 @@ kernel_overlap_sockets(int pid, int master_sock, int victim_sock) {
   }
 
   if(!(victim_inp6_outputopts=kernel_get_proc_inp6_outputopts(pid,
-							      victim_sock))) {
+                                                              victim_sock))) {
     return -1;
   }
 
   pktinfo = victim_inp6_outputopts + 0x10;
   if(kernel_copyin(&pktinfo, master_inp6_outputopts + 0x10,
-		   sizeof(pktinfo))) {
+                   sizeof(pktinfo))) {
 
     return -1;
   }
@@ -938,7 +941,7 @@ kernel_get_proc_rootdir(int pid) {
   }
 
   if(kernel_copyout(filedesc + KERNEL_OFFSET_FILEDESC_FD_RDIR, &vnode,
-		    sizeof(vnode))) {
+                    sizeof(vnode))) {
     return 0;
   }
 
@@ -956,7 +959,7 @@ kernel_get_proc_jaildir(int pid) {
   }
 
   if(kernel_copyout(filedesc + KERNEL_OFFSET_FILEDESC_FD_JDIR, &vnode,
-		    sizeof(vnode))) {
+                    sizeof(vnode))) {
     return 0;
   }
 
@@ -973,7 +976,7 @@ kernel_set_proc_rootdir(int pid, unsigned long vnode) {
   }
 
   if(kernel_copyin(&vnode, filedesc + KERNEL_OFFSET_FILEDESC_FD_RDIR,
-		   sizeof(vnode))) {
+                   sizeof(vnode))) {
     return -1;
   }
 
@@ -990,7 +993,7 @@ kernel_set_proc_jaildir(int pid, unsigned long vnode) {
   }
 
   if(kernel_copyin(&vnode, filedesc + KERNEL_OFFSET_FILEDESC_FD_JDIR,
-		   sizeof(vnode))) {
+                   sizeof(vnode))) {
     return -1;
   }
 

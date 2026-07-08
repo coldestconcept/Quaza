@@ -100,9 +100,9 @@ static int   (*strlen)(const char*) = 0;
 static int   (*sprintf)(char*, const char*, ...) = 0;
 static int   (*sceKernelDlsym)(int, const char*, void*) = 0;
 static int   (*sceKernelLoadStartModule)(const char*, unsigned long, const void*,
-					 unsigned int, void*, int*) = 0;
+                                         unsigned int, void*, int*) = 0;
 static int   (*sceKernelStopUnloadModule)(int, unsigned long, const void*, unsigned int,
-					  const void*, void*) = 0;
+                                          const void*, void*) = 0;
 static int   (*sceSysmoduleLoadModuleInternal)(unsigned int) = 0;
 
 
@@ -298,13 +298,13 @@ rtld_open(const char* basename) {
     // sysmodules needs to be loaded internally first
     for(int i=0; i<sizeof(sysmodtab)/sizeof(sysmodtab[0]); i++) {
       if(!strcmp(basename, sysmodtab[i].name)) {
-	if(!sceSysmoduleLoadModuleInternal) {
-	  return 0;
-	}
-	if(sceSysmoduleLoadModuleInternal(sysmodtab[i].handle)) {
-	  klog_perror("sceSysmoduleLoadModuleInternal");
-	  return 0;
-	}
+        if(!sceSysmoduleLoadModuleInternal) {
+          return 0;
+        }
+        if(sceSysmoduleLoadModuleInternal(sysmodtab[i].handle)) {
+          klog_perror("sceSysmoduleLoadModuleInternal");
+          return 0;
+        }
       }
     }
 
@@ -453,7 +453,7 @@ rtld_load(void) {
     switch(_DYNAMIC[i].d_tag) {
     case DT_NEEDED:
       if(dt_needed(strtab + _DYNAMIC[i].d_un.d_val)) {
-	return -1;
+        return -1;
       }
       break;
     }
@@ -464,19 +464,19 @@ rtld_load(void) {
     switch(rela[i].r_info & 0xffffffffl) {
     case R_X86_64_JMP_SLOT:
       if(r_jmp_slot(&rela[i])) {
-	return -1;
+        return -1;
       }
       break;
 
     case R_X86_64_GLOB_DAT:
       if(r_glob_dat(&rela[i])) {
-	return -1;
+        return -1;
       }
       break;
 
     case R_X86_64_RELATIVE:
       if(r_relative(&rela[i])) {
-	return -1;
+        return -1;
       }
       break;
     }
@@ -489,7 +489,7 @@ rtld_load(void) {
 int
 __rtld_init(payload_args_t *args) {
   static const unsigned char privcaps[16] = {0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-					     0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff};
+                                             0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff};
   int pid = syscall(SYS_getpid);
   unsigned long rootdir = 0;
   unsigned char caps[16];
@@ -533,56 +533,59 @@ __rtld_init(payload_args_t *args) {
 
   // load deps to libkernel
   if((error=args->sceKernelDlsym(libkernel_handle, "sceKernelDlsym",
-				 &sceKernelDlsym))) {
+                                 &sceKernelDlsym))) {
     klog_perror("Unable to resolve 'sceKernelDlsym'");
     return error;
   }
   if((error=args->sceKernelDlsym(libkernel_handle, "sceKernelLoadStartModule",
-				 &sceKernelLoadStartModule))) {
+                                 &sceKernelLoadStartModule))) {
     klog_perror("Unable to resolve 'sceKernelLoadStartModule'");
     return error;
   }
   if((error=args->sceKernelDlsym(libkernel_handle, "sceKernelStopUnloadModule",
-				 &sceKernelStopUnloadModule))) {
+                                 &sceKernelStopUnloadModule))) {
     klog_perror("Unable to resolve 'sceKernelStopUnloadModule'");
     return error;
   }
 
   // jailbreak, raise caps
-  if(!(rootdir=kernel_get_proc_rootdir(pid))) {
-    klog_puts("kernel_get_proc_rootdir failed");
-    return -1;
-  }
-  if(kernel_get_ucred_caps(pid, caps)) {
-    klog_puts("kernel_get_ucred_caps failed");
-    return -1;
-  }
-  if(kernel_set_proc_rootdir(pid, kernel_get_root_vnode())) {
-    klog_puts("kernel_set_proc_rootdir failed");
-    return -1;
-  }
-  if(kernel_set_ucred_caps(pid, privcaps)) {
-    klog_puts("kernel_set_ucred_caps failed");
-    return -1;
+  // Non-fatal: on unknown firmware the kernel offsets are 0 so
+  // kernel_get_proc_rootdir returns 0.  elfldr has already elevated us,
+  // so we can still load .sprx files without re-escaping the sandbox.
+  rootdir = kernel_get_proc_rootdir(pid);
+  if(rootdir) {
+    if(kernel_get_ucred_caps(pid, caps)) {
+      klog_puts("kernel_get_ucred_caps failed — continuing without cap escalation");
+      rootdir = 0;
+    } else if(kernel_set_proc_rootdir(pid, kernel_get_root_vnode())) {
+      klog_puts("kernel_set_proc_rootdir failed — continuing without rootdir escape");
+      rootdir = 0;
+    } else if(kernel_set_ucred_caps(pid, privcaps)) {
+      klog_puts("kernel_set_ucred_caps failed — continuing without cap escalation");
+      kernel_set_proc_rootdir(pid, rootdir); /* restore rootdir at least */
+      rootdir = 0;
+    }
+  } else {
+    klog_puts("kernel_get_proc_rootdir returned 0 — skipping privilege escalation (elfldr already elevated us)");
   }
 
   // load shared objects
   if((libhead=rtld_open("libSceSysmodule.so"))) {
     if((error=args->sceKernelDlsym(libhead->handle, "sceSysmoduleLoadModuleInternal",
-				   &sceSysmoduleLoadModuleInternal))) {
+                                   &sceSysmoduleLoadModuleInternal))) {
       return error;
     }
   }
   error = rtld_load();
 
-  // restore jail and caps
-  if(kernel_set_proc_rootdir(pid, rootdir)) {
-    klog_puts("kernel_set_proc_rootdir failed");
-    return -1;
-  }
-  if(kernel_set_ucred_caps(pid, caps)) {
-    klog_puts("kernel_set_ucred_caps failed");
-    return -1;
+  // restore jail and caps (only if we successfully escalated above)
+  if(rootdir) {
+    if(kernel_set_proc_rootdir(pid, rootdir)) {
+      klog_puts("kernel_set_proc_rootdir restore failed");
+    }
+    if(kernel_set_ucred_caps(pid, caps)) {
+      klog_puts("kernel_set_ucred_caps restore failed");
+    }
   }
 
   return error;
