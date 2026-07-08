@@ -36,6 +36,7 @@ import socket
 import struct
 import sys
 import threading
+import time
 
 DEFAULT_PORT    = 9021
 DEFAULT_ELF     = os.path.join(os.path.dirname(__file__), "quaza_payload.elf")
@@ -156,8 +157,19 @@ def main() -> int:
         print("\n[push] Disconnected.", flush=True)
     finally:
         sock.close()
-        stop_evt.set()
 
+    # TCP pipe closed but the payload keeps running — stay alive so the
+    # UDP netlog thread keeps printing.  Press Ctrl-C to quit.
+    if not stop_evt.is_set():
+        print("[push] TCP closed. Payload still running — UDP log active. "
+              "Press Ctrl-C to exit.", flush=True)
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("\n[push] Exiting.", flush=True)
+
+    stop_evt.set()
     return 0
 
 
