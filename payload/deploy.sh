@@ -13,7 +13,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-PS5_IP="${1:-192.168.0.142}"
+PS5_IP="${1:-192.168.0.42}"
 PORT="${2:-9021}"
 
 echo "==> Building quaza_payload.elf ..."
