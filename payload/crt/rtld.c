@@ -427,62 +427,75 @@ r_relative(Elf64_Rela* rela) {
 
 
 /**
+ * rtld_load — apply relocations and load DT_NEEDED libraries.
  *
+ * The ordering here is critical:
+ *   1. Find RELA / SYMTAB / STRTAB from PT_DYNAMIC.
+ *   2. Apply all R_X86_64_RELATIVE relocations FIRST.
+ *      Static pointer arrays (e.g. LD_LIBRARY_PATH[]) contain unresolved
+ *      VMAs until these are applied; using them before step 2 produces
+ *      garbage paths and makes every library-open attempt fail.
+ *   3. Open libSceSysmodule.so now that LD_LIBRARY_PATH[] is valid.
+ *   4. Process DT_NEEDED now that sceSysmoduleLoadModuleInternal is set.
+ *   5. Apply R_X86_64_GLOB_DAT / R_X86_64_JMP_SLOT (need loaded libs).
  **/
 static int
-rtld_load(void) {
+rtld_load(payload_args_t *args) {
   Elf64_Rela* rela = 0;
   long relasz = 0;
+  int i, error = 0;
 
-  // find lookup tables
-  for(int i=0; _DYNAMIC[i].d_tag!=DT_NULL; i++) {
+  /* ── 1. find lookup tables ─────────────────────────────────────────── */
+  for(i=0; _DYNAMIC[i].d_tag!=DT_NULL; i++) {
     switch(_DYNAMIC[i].d_tag) {
     case DT_SYMTAB:
       symtab = (Elf64_Sym*)(__text_start + _DYNAMIC[i].d_un.d_ptr);
       break;
-
     case DT_STRTAB:
       strtab = (char*)(__text_start + _DYNAMIC[i].d_un.d_ptr);
       break;
-
     case DT_RELA:
       rela = (Elf64_Rela*)(__text_start + _DYNAMIC[i].d_un.d_ptr);
       break;
-
     case DT_RELASZ:
       relasz = _DYNAMIC[i].d_un.d_val;
       break;
     }
   }
 
-  // load needed libraries
-  for(int i=0; _DYNAMIC[i].d_tag!=DT_NULL; i++) {
-    switch(_DYNAMIC[i].d_tag) {
-    case DT_NEEDED:
-      if(dt_needed(strtab + _DYNAMIC[i].d_un.d_val)) {
+  /* ── 2. apply RELATIVE relocations first ───────────────────────────── */
+  for(i=0; i<relasz/(int)sizeof(Elf64_Rela); i++) {
+    if((rela[i].r_info & 0xffffffffl) == R_X86_64_RELATIVE) {
+      if(r_relative(&rela[i])) {
         return -1;
       }
-      break;
     }
   }
 
-  // apply relocations
-  for(int i=0; i<relasz/sizeof(Elf64_Rela); i++) {
+  /* ── 3. open libSceSysmodule (LD_LIBRARY_PATH now valid) ───────────── */
+  if((libhead=rtld_open("libSceSysmodule.so"))) {
+    if((error=args->sceKernelDlsym(libhead->handle,
+                                   "sceSysmoduleLoadModuleInternal",
+                                   &sceSysmoduleLoadModuleInternal))) {
+      klog_perror("Unable to resolve 'sceSysmoduleLoadModuleInternal'");
+    }
+  }
+
+  /* ── 4. load DT_NEEDED libraries ───────────────────────────────────── */
+  for(i=0; _DYNAMIC[i].d_tag!=DT_NULL; i++) {
+    if(_DYNAMIC[i].d_tag == DT_NEEDED) {
+      if(dt_needed(strtab + _DYNAMIC[i].d_un.d_val)) {
+        return -1;
+      }
+    }
+  }
+
+  /* ── 5. apply GLOB_DAT / JMP_SLOT relocations ──────────────────────── */
+  for(i=0; i<relasz/(int)sizeof(Elf64_Rela); i++) {
     switch(rela[i].r_info & 0xffffffffl) {
-    case R_X86_64_JMP_SLOT:
-      if(r_jmp_slot(&rela[i])) {
-        return -1;
-      }
-      break;
-
     case R_X86_64_GLOB_DAT:
+    case R_X86_64_JMP_SLOT:
       if(r_glob_dat(&rela[i])) {
-        return -1;
-      }
-      break;
-
-    case R_X86_64_RELATIVE:
-      if(r_relative(&rela[i])) {
         return -1;
       }
       break;
@@ -573,17 +586,15 @@ __rtld_init(payload_args_t *args) {
       rootdir = 0;
     }
   } else {
-    klog_puts("kernel_get_proc_rootdir returned 0 — skipping privilege escalation (elfldr already elevated us)");
+    klog_puts("kernel_get_proc_rootdir returned 0 — skipping privilege escalation");
   }
 
-  // load shared objects
-  if((libhead=rtld_open("libSceSysmodule.so"))) {
-    if((error=args->sceKernelDlsym(libhead->handle, "sceSysmoduleLoadModuleInternal",
-                                   &sceSysmoduleLoadModuleInternal))) {
-      return error;
-    }
-  }
-  error = rtld_load();
+  // rtld_load() now handles everything in the correct order:
+  //   1. apply R_X86_64_RELATIVE (so LD_LIBRARY_PATH pointers are valid)
+  //   2. open libSceSysmodule.so (so sceSysmoduleLoadModuleInternal is available)
+  //   3. process DT_NEEDED (libs can now be found and loaded)
+  //   4. apply R_X86_64_GLOB_DAT / R_X86_64_JMP_SLOT
+  error = rtld_load(args);
 
   // restore jail and caps (only if we successfully escalated above)
   if(rootdir) {
