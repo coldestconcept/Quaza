@@ -17,7 +17,10 @@ PHDRS {
 
 SECTIONS {
         /* ── RWE segment: code + relocation tables + GOT ───────────────── */
-        .text : ALIGN(CONSTANT(MAXPAGESIZE)) {
+        /* PS5 uses 16 KB pages (0x4000), not Linux's 2 MB hugepages.
+         * CONSTANT(MAXPAGESIZE) resolves to 0x200000 for x86_64-linux-gnu
+         * which makes elfldr's mmap fail on PS5 — use 0x4000 everywhere. */
+        .text : ALIGN(0x4000) {
             PROVIDE_HIDDEN (__text_start = .);
             *(.text .text.*)
             PROVIDE_HIDDEN (__text_end = .);
@@ -46,16 +49,16 @@ SECTIONS {
         .got.plt : { *(.got.plt .got.plt.*) } : ph_text
 
         /* ── RW segment: mutable data + BSS ────────────────────────────── */
-        .data : ALIGN(CONSTANT(MAXPAGESIZE)) {
+        .data : ALIGN(0x4000) {
             *(.data .data.*)
         } : ph_data
 
-        .dynamic : ALIGN(CONSTANT(MAXPAGESIZE)) {
+        .dynamic : ALIGN(0x4000) {
             PROVIDE_HIDDEN (_DYNAMIC = .);
             *(.dynamic)
         } : ph_data : ph_dyn
 
-        .bss (NOLOAD) : ALIGN(CONSTANT(MAXPAGESIZE)) {
+        .bss (NOLOAD) : ALIGN(0x4000) {
             PROVIDE_HIDDEN (__bss_start = .);
             *(.bss .bss.*);
             *(COMMON)
