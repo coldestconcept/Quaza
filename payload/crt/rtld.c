@@ -371,6 +371,19 @@ dt_needed(const char* basename) {
 
 
 /**
+ * Write a resolved symbol address directly into the GOT.
+ * The GOT lives in a plain RW segment (ph_data FLAGS=0x6), so a volatile
+ * pointer write works without any kernel r/w primitives.  mdbg_copyin is
+ * only needed for patching read-only text (e.g. patch.c), not our own GOT.
+ **/
+static int
+write_got(unsigned long loc, unsigned long val) {
+  *(volatile unsigned long*)loc = val;
+  return 0;
+}
+
+
+/**
  *
  **/
 static int
@@ -378,12 +391,11 @@ r_glob_dat(Elf64_Rela* rela) {
   unsigned long loc = (unsigned long)(__text_start + rela->r_offset);
   Elf64_Sym* sym = symtab + ELF64_R_SYM(rela->r_info);
   const char* name = strtab + sym->st_name;
-  int pid = syscall(SYS_getpid);
   unsigned long val = 0;
 
   for(rtld_lib_t *lib=libhead; lib!=0; lib=lib->next) {
     if((val=rtld_sym(lib, name))) {
-      return mdbg_copyin(pid, &val, loc, sizeof(val));
+      return write_got(loc, val);
     }
   }
 
@@ -409,13 +421,8 @@ static int
 r_relative(Elf64_Rela* rela) {
   unsigned long loc = (unsigned long)(__text_start + rela->r_offset);
   unsigned long val = (unsigned long)(__text_start + rela->r_addend);
-  int pid = syscall(SYS_getpid);
 
-  if(mdbg_copyin(pid, &val, loc, sizeof(val))) {
-    klog_perror("mdbg_copyin");
-    return -1;
-  }
-  return 0;
+  return write_got(loc, val);
 }
 
 
