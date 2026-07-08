@@ -12,9 +12,15 @@
 /* Opaque FILE — defined by the C runtime we link against at PS5 runtime */
 typedef struct __sFILE FILE;
 
-extern FILE *stdin;
-extern FILE *stdout;
-extern FILE *stderr;
+/* PS5 uses FreeBSD ABI: file globals are exported as __stdinp/__stdoutp/__stderrp.
+ * Using these names ensures sceKernelDlsym() can resolve them from
+ * libSceLibcInternal at runtime. */
+extern FILE *__stdinp;
+extern FILE *__stdoutp;
+extern FILE *__stderrp;
+#define stdin  __stdinp
+#define stdout __stdoutp
+#define stderr __stderrp
 
 int    printf(const char *fmt, ...);
 int    fprintf(FILE *stream, const char *fmt, ...);

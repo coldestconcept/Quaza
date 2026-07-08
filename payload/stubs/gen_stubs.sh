@@ -26,7 +26,8 @@ make_stub() {
     # Symbols that are data (variables), not functions — must be emitted as
     # .data entries with GLOB_DAT relocations, not function stubs, or the
     # linker/rtld will treat them as callable code.
-    local data_syms="errno stdin stdout stderr"
+    # PS5 uses FreeBSD ABI: FILE* globals are __stdinp/__stdoutp/__stderrp.
+    local data_syms="errno __stdinp __stdoutp __stderrp"
 
     local asm_file="${name}.s"
     {
@@ -100,7 +101,7 @@ make_stub libSceLibcInternal libSceLibcInternal.so \
     clock_gettime \
     isdigit isxdigit isalpha isalnum isupper islower isspace ispunct \
     isprint iscntrl toupper tolower \
-    __error stdin stdout stderr
+    __error __stdinp __stdoutp __stderrp
 
 # ── libSceNet.so — networking ─────────────────────────────────────────────────
 make_stub libSceNet libSceNet.so \

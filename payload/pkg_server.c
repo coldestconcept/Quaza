@@ -204,7 +204,16 @@ void *pkg_creation_thread(void *arg) {
     current_progress.progress_percent = 20;
     pthread_mutex_unlock(&progress_mutex);
 
-    int rc = pkg_build(args->path, args->content_id, output_path);
+    pkg_project_t project;
+    memset(&project, 0, sizeof(project));
+    strncpy(project.content_id, args->content_id, sizeof(project.content_id) - 1);
+    strncpy(project.app_path,   args->path,       sizeof(project.app_path)   - 1);
+    project.type            = PKG_TYPE_PS5_GD;
+    project.pfs_block_size  = 0x10000;
+    project.use_encryption  = false;
+    project.is_patch        = false;
+
+    int rc = pkg_build(&project, args->path, output_path);
 
     pthread_mutex_lock(&progress_mutex);
     if (rc == 0) {
