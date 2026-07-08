@@ -85,6 +85,7 @@ make_stub libSceLibcInternal libSceLibcInternal.so \
     open close read write lseek dup dup2 pipe \
     access unlink rmdir rename symlink readlink getcwd chdir \
     sleep usleep getpid getuid geteuid \
+    getifaddrs freeifaddrs \
     stat fstat lstat mkdir chmod fchmod umask \
     fcntl \
     opendir readdir closedir rewinddir \
@@ -108,7 +109,6 @@ make_stub libSceNet libSceNet.so \
     socket bind listen accept connect \
     send recv sendto recvfrom \
     setsockopt getsockopt shutdown select poll \
-    getifaddrs freeifaddrs \
     inet_ntop inet_pton inet_addr \
     htons htonl ntohs ntohl \
     getaddrinfo freeaddrinfo gethostbyname

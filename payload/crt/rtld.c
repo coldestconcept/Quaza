@@ -399,9 +399,15 @@ r_glob_dat(Elf64_Rela* rela) {
     }
   }
 
-  klog_printf("Unable to resolve '%s'\n", name);
-
-  return -1;
+  /* Symbol not found in any loaded library.
+   * Write NULL to the GOT slot so the payload can still start — any code
+   * that actually calls this function will SIGSEGV, but at least main()
+   * runs and we can tell from port 4242 opening whether rtld succeeded.
+   * The missing symbol name is klogged so it shows in the kernel ring buf.
+   */
+  klog_printf("WARN: unresolved symbol '%s' — GOT set to NULL\n", name);
+  write_got(loc, 0);
+  return 0;
 }
 
 
