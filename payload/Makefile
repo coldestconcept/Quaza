@@ -80,7 +80,6 @@ CFLAGS := \
 LDFLAGS := \
     -target $(CC_TARGET) \
     -fuse-ld=lld \
-    -no-pie \
     -nostartfiles \
     -nostdlib \
     -Wl,-T,payload.ld \
