@@ -113,6 +113,7 @@ LIBPKG_SRCS := \
 
 PAYLOAD_SRCS := \
     main.c \
+    netlog.c \
     pkg_server.c \
     browser_launch.c \
     self_install.c \
