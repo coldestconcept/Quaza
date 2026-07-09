@@ -32,6 +32,7 @@ void netlog_init(void) {
     setsockopt(g_fd, SOL_SOCKET, SO_BROADCAST, &yes, sizeof(yes));
 
     memset(&g_dest, 0, sizeof(g_dest));
+    g_dest.sin_len         = (uint8_t)sizeof(g_dest); /* FreeBSD/PS5 requires this */
     g_dest.sin_family      = AF_INET;
     g_dest.sin_port        = htons(NETLOG_PORT);
     g_dest.sin_addr.s_addr = 0xFFFFFFFFu; /* 255.255.255.255 */

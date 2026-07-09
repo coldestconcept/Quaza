@@ -627,6 +627,7 @@ int pkg_server_init(void) {
 
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
+    addr.sin_len         = (uint8_t)sizeof(addr); /* FreeBSD/PS5 requires this */
     addr.sin_family      = AF_INET;
     addr.sin_addr.s_addr = INADDR_ANY;
     addr.sin_port        = htons(PKG_SERVER_PORT);

@@ -12,8 +12,15 @@ struct in_addr {
     in_addr_t s_addr;
 };
 
+/* FreeBSD/PS5 sockaddr_in — MUST include sin_len before sin_family.
+ * The PS5 kernel reads byte 0 as the struct length and byte 1 as the
+ * address family.  A Linux-style struct (no sin_len, sa_family_t as
+ * uint16_t) puts AF_INET=2 at byte 0, so the kernel sees sin_len=2
+ * and sin_family=AF_UNSPEC — every sendto/bind silently fails.
+ * Both fields are uint8_t (as in FreeBSD's <netinet/in.h>). */
 struct sockaddr_in {
-    sa_family_t    sin_family;
+    uint8_t        sin_len;     /* total length = sizeof(struct sockaddr_in) = 16 */
+    uint8_t        sin_family;  /* AF_INET = 2 */
     in_port_t      sin_port;
     struct in_addr sin_addr;
     char           sin_zero[8];
@@ -24,12 +31,17 @@ struct in6_addr {
 };
 
 struct sockaddr_in6 {
-    sa_family_t     sin6_family;
+    uint8_t         sin6_len;       /* sizeof(struct sockaddr_in6) = 28 */
+    uint8_t         sin6_family;    /* AF_INET6 = 28 */
     in_port_t       sin6_port;
     uint32_t        sin6_flowinfo;
     struct in6_addr sin6_addr;
     uint32_t        sin6_scope_id;
 };
+
+/* Compile-time layout guards — catch any future struct drift immediately. */
+_Static_assert(sizeof(struct sockaddr_in)  == 16, "sockaddr_in must be 16 bytes on PS5/FreeBSD");
+_Static_assert(sizeof(struct sockaddr_in6) == 28, "sockaddr_in6 must be 28 bytes on PS5/FreeBSD");
 
 #define INADDR_ANY       ((in_addr_t)0x00000000)
 #define INADDR_BROADCAST ((in_addr_t)0xffffffff)

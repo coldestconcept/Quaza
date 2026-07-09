@@ -9,14 +9,19 @@
 
 #include <sys/types.h>
 
+/* FreeBSD/PS5 sockaddr — byte 0 is sa_len, byte 1 is sa_family (both uint8_t).
+ * Matches the layout the PS5 kernel produces when filling in ifaddrs and
+ * accept() client addresses, and what bind()/connect()/sendto() expect. */
 struct sockaddr {
-    sa_family_t sa_family;
+    uint8_t     sa_len;
+    uint8_t     sa_family;
     char        sa_data[14];
 };
 
 struct sockaddr_storage {
-    sa_family_t ss_family;
-    char        __ss_pad[128 - sizeof(sa_family_t)];
+    uint8_t  ss_len;
+    uint8_t  ss_family;
+    char     __ss_pad[128 - 2];
 };
 
 struct iovec {
