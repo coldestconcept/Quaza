@@ -271,16 +271,27 @@ rtld_open(const char* basename) {
   char filename[255];
   int handle = 0;
 
-  if(!strcmp(basename, "libkernel.so") ||
-     !strcmp(basename, "libkernel_web.so") ||
-     !strcmp(basename, "libkernel_sys.so")) {
+  /* Match libkernel regardless of whether the SDK stub uses the .so or
+   * .sprx SONAME.  The PS5 Payload SDK sce_stubs/libkernel.so has SONAME
+   * "libkernel.sprx", so DT_NEEDED contains "libkernel.sprx" — but the
+   * .so → .sprx path-mangling below strips only 2 chars ("so") and appends
+   * "sprx", turning "libkernel.sprx" into "libkernel.spsprx" — a corrupt
+   * path that never loads.  Handle all known variants explicitly here. */
+  if(!strcmp(basename, "libkernel.so")      ||
+     !strcmp(basename, "libkernel_web.so")  ||
+     !strcmp(basename, "libkernel_sys.so")  ||
+     !strcmp(basename, "libkernel.sprx")    ||
+     !strcmp(basename, "libkernel_web.sprx")||
+     !strcmp(basename, "libkernel_sys.sprx")) {
     lib           = malloc(sizeof(rtld_lib_t));
     lib->handle   = libkernel_handle;
     lib->next     = 0;
     return lib;
   }
 
-  if(!strcmp(basename, "libSceLibcInternal.so")) {
+  /* Same for libSceLibcInternal — SDK may emit either SONAME. */
+  if(!strcmp(basename, "libSceLibcInternal.so") ||
+     !strcmp(basename, "libSceLibcInternal.sprx")) {
     lib           = malloc(sizeof(rtld_lib_t));
     lib->handle   = 0x2;
     lib->next     = 0;
