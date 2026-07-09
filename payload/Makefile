@@ -48,6 +48,7 @@ ifeq ($(SDK_PRESENT),yes)
     SYSROOT_FLAGS := -nostdinc \
                      -I$(SDK_INCLUDE) \
                      $(if $(wildcard $(SDK_INCLUDE)/c++/v1),-I$(SDK_INCLUDE)/c++/v1) \
+                     -I$(CURDIR)/include \
                      -isystem $(CLANG_BUILTINS_SDK)
     LIB_FLAGS     := -L$(SDK_LIB)
     STUB_PREREQ   :=
