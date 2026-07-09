@@ -14,27 +14,46 @@
 #   export PS5_PAYLOAD_SDK=$HOME/target-sdk/ps5-payload-sdk  # optional
 #   make
 
-PS5_PAYLOAD_SDK ?= $(HOME)/target-sdk/ps5-payload-sdk
+# Try the most common install locations in order.
+# john-tornblom/ps5-payload-sdk uses sce_stubs/ for libs; older forks use target/lib/.
+PS5_PAYLOAD_SDK ?= $(or \
+    $(if $(wildcard $(HOME)/ps5-payload-sdk/sce_stubs/libkernel.so),$(HOME)/ps5-payload-sdk),\
+    $(if $(wildcard $(HOME)/target-sdk/ps5-payload-sdk/target/lib/libkernel.so),$(HOME)/target-sdk/ps5-payload-sdk),\
+    $(HOME)/ps5-payload-sdk)
+
+# SDK layout: newer builds use sce_stubs/ for libs and include/ at root;
+# older builds used target/lib and target/include.
+SDK_SCE_STUBS   := $(PS5_PAYLOAD_SDK)/sce_stubs
 SDK_TARGET      := $(PS5_PAYLOAD_SDK)/target
-SDK_INCLUDE     := $(SDK_TARGET)/include
-SDK_LIB         := $(SDK_TARGET)/lib
+SDK_INCLUDE     := $(or $(wildcard $(PS5_PAYLOAD_SDK)/include),$(SDK_TARGET)/include)
+SDK_LIB         := $(or $(wildcard $(SDK_SCE_STUBS)),$(SDK_TARGET)/lib)
 
 CC             := clang
 TARGET_TRIPLE  := x86_64-sie-ps5
 STUB_DIR       := $(CURDIR)/stubs
 
 # ── SDK detection ─────────────────────────────────────────────────────────────
-SDK_PRESENT := $(shell test -d "$(SDK_LIB)" && echo yes || echo no)
+SDK_PRESENT := $(shell test -f "$(SDK_LIB)/libkernel.so" && echo yes || echo no)
 
 ifeq ($(SDK_PRESENT),yes)
     # ── SDK mode ──────────────────────────────────────────────────────────────
+    # john-tornblom/ps5-payload-sdk layout:
+    #   sce_stubs/   — pre-built stub .so files (correct PS5 symbol tables)
+    #   include/     — PS5-specific headers at SDK root
+    # Older forks put libs in target/lib and headers in target/include.
     CC_TARGET     := $(TARGET_TRIPLE)
-    SYSROOT_FLAGS := -isysroot $(SDK_TARGET) \
+    # Build up include flags: SDK headers first, then C++ headers if present,
+    # then clang's own builtins for stdint.h / stddef.h / etc.
+    CLANG_BUILTINS_SDK := $(shell $(CC) -print-resource-dir 2>/dev/null)/include
+    SYSROOT_FLAGS := -nostdinc \
                      -I$(SDK_INCLUDE) \
-                     -I$(SDK_INCLUDE)/c++/v1
+                     $(if $(wildcard $(SDK_INCLUDE)/c++/v1),-I$(SDK_INCLUDE)/c++/v1) \
+                     -isystem $(CLANG_BUILTINS_SDK)
     LIB_FLAGS     := -L$(SDK_LIB)
     STUB_PREREQ   :=
     $(info [SDK mode] Using PS5 Payload SDK at $(PS5_PAYLOAD_SDK))
+    $(info [SDK mode] Headers: $(SDK_INCLUDE))
+    $(info [SDK mode] Libs:    $(SDK_LIB))
 else
     # ── Stub mode ─────────────────────────────────────────────────────────────
     # Use x86_64-linux-gnu so clang finds the host's stdio.h / stdlib.h.
