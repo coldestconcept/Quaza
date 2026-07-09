@@ -46,6 +46,7 @@ extern int main(int argc, char* argv[], char *envp[]);
 int __klog_init(payload_args_t *args);
 int __kernel_init(payload_args_t* args);
 int __rtld_init(payload_args_t* args);
+extern int rtld_null_syms; /* unresolved GOT slots after rtld_load */
 
 
 /**
@@ -257,7 +258,7 @@ pre_init(payload_args_t *args) {
     raw_udp_probe(5);
     return error;
   }
-  early_notify(args, 5, 0);   /* rtld OK — main() will run next */
+  early_notify(args, 5, rtld_null_syms);   /* rc = unresolved symbol count */
   raw_udp_probe(5);
 
   return 0;

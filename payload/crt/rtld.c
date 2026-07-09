@@ -411,6 +411,7 @@ r_glob_dat(Elf64_Rela* rela) {
    */
   klog_printf("WARN: unresolved symbol '%s' — GOT set to NULL\n", name);
   write_got(loc, 0);
+  rtld_null_syms++;
   return 0;
 }
 
@@ -449,6 +450,9 @@ r_relative(Elf64_Rela* rela) {
  *   4. Process DT_NEEDED now that sceSysmoduleLoadModuleInternal is set.
  *   5. Apply R_X86_64_GLOB_DAT / R_X86_64_JMP_SLOT (need loaded libs).
  **/
+/* Count of GOT slots that rtld could not resolve (left as NULL). */
+int rtld_null_syms = 0;
+
 static int
 rtld_load(payload_args_t *args) {
   Elf64_Rela* rela = 0;
@@ -512,6 +516,8 @@ rtld_load(payload_args_t *args) {
     }
   }
 
+  klog_printf("rtld_load done: %d unresolved symbol(s) left as NULL\n",
+              rtld_null_syms);
   return 0;
 }
 
