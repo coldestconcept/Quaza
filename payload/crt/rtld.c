@@ -262,6 +262,32 @@ static const sysmodtab_t sysmodtab[] = {
 };
 
 
+/* ── stem_match ───────────────────────────────────────────────────────────
+ * Compare two library basenames treating ".so" and ".sprx" as equivalent
+ * extensions.  The PS5 Payload SDK emits ".sprx" SONAMEs in DT_NEEDED
+ * (e.g. "libkernel.sprx") while the sysmodtab and special-cases below are
+ * keyed on ".so" names.  Normalising at comparison time means we handle
+ * both without duplicating every table entry.
+ *
+ * Only strcmp/strlen are used (both are function pointers resolved in
+ * __rtld_init before rtld_open is ever called).
+ */
+static int
+stem_match(const char* a, const char* b) {
+  int la = strlen(a), lb = strlen(b);
+  /* strip extension from a */
+  if     (la > 3 && !strcmp(a + la - 3, ".so"))   la -= 3;
+  else if(la > 5 && !strcmp(a + la - 5, ".sprx"))  la -= 5;
+  /* strip extension from b */
+  if     (lb > 3 && !strcmp(b + lb - 3, ".so"))   lb -= 3;
+  else if(lb > 5 && !strcmp(b + lb - 5, ".sprx"))  lb -= 5;
+  if(la != lb) return 0;
+  for(int i = 0; i < la; i++)
+    if(a[i] != b[i]) return 0;
+  return 1;
+}
+
+
 /**
  *
  **/
@@ -269,50 +295,52 @@ static rtld_lib_t*
 rtld_open(const char* basename) {
   rtld_lib_t *lib = 0;
   char filename[255];
+  int namelen = strlen(basename);
   int handle = 0;
 
-  /* Match libkernel regardless of whether the SDK stub uses the .so or
-   * .sprx SONAME.  The PS5 Payload SDK sce_stubs/libkernel.so has SONAME
-   * "libkernel.sprx", so DT_NEEDED contains "libkernel.sprx" — but the
-   * .so → .sprx path-mangling below strips only 2 chars ("so") and appends
-   * "sprx", turning "libkernel.sprx" into "libkernel.spsprx" — a corrupt
-   * path that never loads.  Handle all known variants explicitly here. */
-  if(!strcmp(basename, "libkernel.so")      ||
-     !strcmp(basename, "libkernel_web.so")  ||
-     !strcmp(basename, "libkernel_sys.so")  ||
-     !strcmp(basename, "libkernel.sprx")    ||
-     !strcmp(basename, "libkernel_web.sprx")||
-     !strcmp(basename, "libkernel_sys.sprx")) {
+  /* libkernel — handle 0x1 (or 0x2001 on older firmware).  The PS5
+   * Payload SDK stub has SONAME "libkernel.sprx" so DT_NEEDED arrives
+   * as that; stem_match accepts both .so and .sprx forms. */
+  if(stem_match(basename, "libkernel.so")     ||
+     stem_match(basename, "libkernel_web.so") ||
+     stem_match(basename, "libkernel_sys.so")) {
     lib           = malloc(sizeof(rtld_lib_t));
     lib->handle   = libkernel_handle;
     lib->next     = 0;
     return lib;
   }
 
-  /* Same for libSceLibcInternal — SDK may emit either SONAME. */
-  if(!strcmp(basename, "libSceLibcInternal.so") ||
-     !strcmp(basename, "libSceLibcInternal.sprx")) {
+  /* libSceLibcInternal — always handle 0x2. */
+  if(stem_match(basename, "libSceLibcInternal.so")) {
     lib           = malloc(sizeof(rtld_lib_t));
     lib->handle   = 0x2;
     lib->next     = 0;
     return lib;
   }
 
+  /* Build the filesystem path: always use .sprx regardless of whether
+   * the DT_NEEDED basename is .so or .sprx.  The original code stripped
+   * the last 2 chars and appended "sprx" — correct for ".so" (removes
+   * "so", appends "sprx") but corrupt for ".sprx" (removes "rx", giving
+   * e.g. "libSceNet.spsprx").  Now we determine the stem length first. */
+  int stemlen = namelen;
+  if     (namelen > 3 && !strcmp(basename + namelen - 3, ".so"))   stemlen = namelen - 3;
+  else if(namelen > 5 && !strcmp(basename + namelen - 5, ".sprx"))  stemlen = namelen - 5;
+
   for(int i=0; i<sizeof(LD_LIBRARY_PATH)/sizeof(LD_LIBRARY_PATH[0]); i++) {
-    sprintf(filename, "%s/%s", LD_LIBRARY_PATH[i], basename);
-    filename[strlen(filename)-2] = 0;
-    strcat(filename, "sprx");
+    sprintf(filename, "%s/%.*s.sprx", LD_LIBRARY_PATH[i], stemlen, basename);
     if(syscall(SYS_access, filename, 0) < 0) {
       continue;
     }
 
-    // sysmodules needs to be loaded internally first
-    for(int i=0; i<sizeof(sysmodtab)/sizeof(sysmodtab[0]); i++) {
-      if(!strcmp(basename, sysmodtab[i].name)) {
+    /* sysmodules must be loaded internally first; match by stem so both
+     * ".so" and ".sprx" DT_NEEDED entries hit the right table entry. */
+    for(int j=0; j<(int)(sizeof(sysmodtab)/sizeof(sysmodtab[0])); j++) {
+      if(stem_match(basename, sysmodtab[j].name)) {
         if(!sceSysmoduleLoadModuleInternal) {
           return 0;
         }
-        if(sceSysmoduleLoadModuleInternal(sysmodtab[i].handle)) {
+        if(sceSysmoduleLoadModuleInternal(sysmodtab[j].handle)) {
           klog_perror("sceSysmoduleLoadModuleInternal");
           return 0;
         }
