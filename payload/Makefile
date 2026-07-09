@@ -95,10 +95,12 @@ CFLAGS := \
     -MMD -MP
 
 # ── Link flags ────────────────────────────────────────────────────────────────
-# Use clang as the linker driver (not raw ld.lld) — driver flags like
-# -nostartfiles and -fuse-ld= are then valid.
+# The link step always uses x86_64-linux-gnu so that -fuse-ld=lld is accepted
+# by the clang driver.  The x86_64-sie-ps5 driver rejects that flag.
+# The ELF output format is controlled entirely by payload.ld (OUTPUT_FORMAT /
+# OUTPUT_ARCH), so the driver triple at link time does not affect the output.
 LDFLAGS := \
-    -target $(CC_TARGET) \
+    -target x86_64-linux-gnu \
     -fuse-ld=lld \
     -nostartfiles \
     -nostdlib \
