@@ -374,6 +374,10 @@ dt_needed(const char* basename) {
 }
 
 
+/* Count of GOT slots that rtld could not resolve (left as NULL). */
+int rtld_null_syms = 0;
+
+
 /**
  * Write a resolved symbol address directly into the GOT.
  * The GOT lives in a plain RW segment (ph_data FLAGS=0x6), so a volatile
@@ -450,9 +454,6 @@ r_relative(Elf64_Rela* rela) {
  *   4. Process DT_NEEDED now that sceSysmoduleLoadModuleInternal is set.
  *   5. Apply R_X86_64_GLOB_DAT / R_X86_64_JMP_SLOT (need loaded libs).
  **/
-/* Count of GOT slots that rtld could not resolve (left as NULL). */
-int rtld_null_syms = 0;
-
 static int
 rtld_load(payload_args_t *args) {
   Elf64_Rela* rela = 0;
