@@ -82,12 +82,19 @@ payload_get_args(void) {
 
 
 /* ── raw_udp_probe ───────────────────────────────────────────────────────────
- * Send a tiny UDP datagram to 255.255.255.255:9020 using ONLY raw FreeBSD
- * syscalls (SYS_socket/SYS_setsockopt/SYS_sendto/SYS_close).  This bypasses
- * the GOT entirely so it works at any point after ptr_syscall is initialised
- * — even if rtld has not yet resolved a single library symbol.
+ * Send a UDP diagnostic datagram using ONLY raw FreeBSD syscalls — no GOT,
+ * no libc — so it works at any point after ptr_syscall is initialised, even
+ * before rtld has resolved a single library symbol.
  *
- * push_to_ps5.py listens on :9020 and will print every packet received.
+ * Destination strategy (both attempted every call):
+ *
+ *   1. UNICAST to the pusher's IP  — obtained via getpeername(stdin), which
+ *      works when elfldr has dup2'd its accepted TCP socket onto fd 0.
+ *      This bypasses WiFi AP/client isolation that silently drops broadcasts.
+ *
+ *   2. BROADCAST to 255.255.255.255 — fallback for non-AP-isolated networks.
+ *
+ * push_to_ps5.py listens on 0.0.0.0:9020 and receives both variants.
  *
  * Message format: "PROBE sN\n"  (N = step digit 0-9)
  */
@@ -96,30 +103,48 @@ raw_udp_probe(int step)
 {
   /* FreeBSD constants (PS5 is FreeBSD-derived) */
   enum {
-    _AF_INET    = 2,
-    _SOCK_DGRAM = 2,
-    _IPPROTO_UDP= 17,
-    _SOL_SOCKET = 0xffff,
+    _AF_INET      = 2,
+    _SOCK_DGRAM   = 2,
+    _IPPROTO_UDP  = 17,
+    _SOL_SOCKET   = 0xffff,
     _SO_BROADCAST = 0x0020,
-    _PORT       = 9020,  /* push_to_ps5.py listens here */
+    _PORT         = 9020,
   };
 
   /* FreeBSD sockaddr_in: sin_len(1) sin_family(1) sin_port(2) sin_addr(4) pad(8) */
-  struct {
+  struct _sa {
     unsigned char  sin_len;
     unsigned char  sin_family;
-    unsigned short sin_port;   /* network byte order */
-    unsigned int   sin_addr;   /* INADDR_BROADCAST */
+    unsigned short sin_port;
+    unsigned int   sin_addr;
     char           sin_zero[8];
-  } sa = { 0 };
-  sa.sin_len    = 16;
-  sa.sin_family = _AF_INET;
-  /* htons(9020): 9020 = 0x233C → byte-swap → 0x3C23 */
-  sa.sin_port   = (unsigned short)((_PORT >> 8) | ((_PORT & 0xff) << 8));
-  sa.sin_addr   = 0xffffffffu;  /* 255.255.255.255 */
+  };
+
+  /* htons(9020): 0x233C → 0x3C23 */
+  unsigned short net_port = (unsigned short)((_PORT >> 8) | ((_PORT & 0xff) << 8));
+
+  /* ── 1. Try unicast: getpeername(stdin) to get pusher's IP ───────── */
+  struct _sa peer = { 0 };
+  unsigned int peerlen = 16;
+  int has_unicast = 0;
+  if (syscall(SYS_getpeername, (long)0, &peer, &peerlen) == 0 &&
+      peer.sin_family == _AF_INET &&
+      peer.sin_addr   != 0u &&
+      peer.sin_addr   != 0xffffffffu) {
+    peer.sin_len  = 16;
+    peer.sin_port = net_port;
+    has_unicast   = 1;
+  }
+
+  /* ── 2. Broadcast destination (always attempted as fallback) ─────── */
+  struct _sa sa_bc = { 0 };
+  sa_bc.sin_len    = 16;
+  sa_bc.sin_family = _AF_INET;
+  sa_bc.sin_port   = net_port;
+  sa_bc.sin_addr   = 0xffffffffu;  /* 255.255.255.255 */
 
   long fd = syscall(SYS_socket, _AF_INET, _SOCK_DGRAM, _IPPROTO_UDP);
-  if(fd < 0) return;
+  if (fd < 0) return;
 
   int one = 1;
   syscall(SYS_setsockopt, fd, _SOL_SOCKET, _SO_BROADCAST, &one, (long)sizeof(one));
@@ -131,7 +156,11 @@ raw_udp_probe(int step)
   msg[7] = '0' + (char)(step % 10);
   msg[8] = '\n'; msg[9] = '\0';
 
-  syscall(SYS_sendto, fd, msg, (long)9, (long)0, &sa, (long)sizeof(sa));
+  /* Send unicast first (succeeds through AP isolation), then broadcast */
+  if (has_unicast)
+    syscall(SYS_sendto, fd, msg, (long)9, (long)0, &peer, (long)16);
+  syscall(SYS_sendto, fd, msg, (long)9, (long)0, &sa_bc, (long)16);
+
   syscall(SYS_close, fd);
 }
 

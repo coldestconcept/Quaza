@@ -23,6 +23,7 @@ along with this program; see the file COPYING. If not, see
 #define SYS_getpid      20
 #define SYS_access      33
 #define SYS_socket      97
+#define SYS_getpeername 32
 #define SYS_sendto      133
 #define SYS_setsockopt  105
 #define SYS_sysctl      202
