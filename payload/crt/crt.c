@@ -15,6 +15,13 @@ along with this program; see the file COPYING. If not, see
 <http://www.gnu.org/licenses/>.  */
 
 #include "payload.h"
+#include "syscall.h"
+
+#ifndef O_WRONLY
+#define O_WRONLY  0x0001
+#define O_CREAT   0x0200
+#define O_TRUNC   0x0400
+#endif
 
 
 /**
@@ -70,6 +77,61 @@ static payload_args_t* payload_args = 0;
 payload_args_t*
 payload_get_args(void) {
   return payload_args;
+}
+
+
+/* ── raw_udp_probe ───────────────────────────────────────────────────────────
+ * Send a tiny UDP datagram to 255.255.255.255:9020 using ONLY raw FreeBSD
+ * syscalls (SYS_socket/SYS_setsockopt/SYS_sendto/SYS_close).  This bypasses
+ * the GOT entirely so it works at any point after ptr_syscall is initialised
+ * — even if rtld has not yet resolved a single library symbol.
+ *
+ * push_to_ps5.py listens on :9020 and will print every packet received.
+ *
+ * Message format: "PROBE sN\n"  (N = step digit 0-9)
+ */
+static void
+raw_udp_probe(int step)
+{
+  /* FreeBSD constants (PS5 is FreeBSD-derived) */
+  enum {
+    _AF_INET    = 2,
+    _SOCK_DGRAM = 2,
+    _IPPROTO_UDP= 17,
+    _SOL_SOCKET = 0xffff,
+    _SO_BROADCAST = 0x0020,
+    _PORT       = 9020,  /* push_to_ps5.py listens here */
+  };
+
+  /* FreeBSD sockaddr_in: sin_len(1) sin_family(1) sin_port(2) sin_addr(4) pad(8) */
+  struct {
+    unsigned char  sin_len;
+    unsigned char  sin_family;
+    unsigned short sin_port;   /* network byte order */
+    unsigned int   sin_addr;   /* INADDR_BROADCAST */
+    char           sin_zero[8];
+  } sa = { 0 };
+  sa.sin_len    = 16;
+  sa.sin_family = _AF_INET;
+  /* htons(9020): 9020 = 0x233C → byte-swap → 0x3C23 */
+  sa.sin_port   = (unsigned short)((_PORT >> 8) | ((_PORT & 0xff) << 8));
+  sa.sin_addr   = 0xffffffffu;  /* 255.255.255.255 */
+
+  long fd = syscall(SYS_socket, _AF_INET, _SOCK_DGRAM, _IPPROTO_UDP);
+  if(fd < 0) return;
+
+  int one = 1;
+  syscall(SYS_setsockopt, fd, _SOL_SOCKET, _SO_BROADCAST, &one, (long)sizeof(one));
+
+  /* Build message on the stack: "PROBE sN\n" */
+  char msg[12];
+  msg[0]='P'; msg[1]='R'; msg[2]='O'; msg[3]='B'; msg[4]='E';
+  msg[5]=' '; msg[6]='s';
+  msg[7] = '0' + (char)(step % 10);
+  msg[8] = '\n'; msg[9] = '\0';
+
+  syscall(SYS_sendto, fd, msg, (long)9, (long)0, &sa, (long)sizeof(sa));
+  syscall(SYS_close, fd);
 }
 
 
@@ -164,6 +226,7 @@ pre_init(payload_args_t *args) {
     }
   }
   ptr_syscall += 0xa;   /* jump to the actual syscall insn inside getpid */
+  raw_udp_probe(1);     /* syscall ptr ready — first probe that can fire */
 
   /* ── step 2: thread flag ────────────────────────────────────────── */
   if((error=args->sceKernelDlsym(0x2, "__isthreaded", &__isthreaded))) {
@@ -178,10 +241,12 @@ pre_init(payload_args_t *args) {
     return error;
   }
   early_notify(args, 3, 0);   /* klog OK */
+  raw_udp_probe(3);
 
   /* ── step 4: kernel patches (non-fatal on unknown firmware) ─────── */
   if((error=__kernel_init(args))) {
     early_notify(args, 4, error);
+    raw_udp_probe(4);
     return error;
   }
   early_notify(args, 4, 0);   /* kernel OK */
@@ -189,9 +254,11 @@ pre_init(payload_args_t *args) {
   /* ── step 5: dynamic linker (loads DT_NEEDED .sprx files) ──────── */
   if((error=__rtld_init(args))) {
     early_notify(args, 5, error);
+    raw_udp_probe(5);
     return error;
   }
   early_notify(args, 5, 0);   /* rtld OK — main() will run next */
+  raw_udp_probe(5);
 
   return 0;
 }
@@ -242,6 +309,7 @@ _start(payload_args_t *args, int argc, char* argv[], char* envp[]) {
 
   /* Probe 6: main() about to run. */
   early_notify(args, 6, 0);
+  raw_udp_probe(6);
 
   /* Run .init functions. */
   count = __init_array_end - __init_array_start;

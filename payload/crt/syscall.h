@@ -18,8 +18,12 @@ along with this program; see the file COPYING. If not, see
 
 #define SYS_read        3
 #define SYS_write       4
+#define SYS_open        5
+#define SYS_close       6
 #define SYS_getpid      20
 #define SYS_access      33
+#define SYS_socket      97
+#define SYS_sendto      133
 #define SYS_setsockopt  105
 #define SYS_sysctl      202
 #define SYS_mdbg_call   573

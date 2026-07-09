@@ -26,6 +26,15 @@ SECTIONS {
             PROVIDE_HIDDEN (__text_end = .);
         } : ph_text
 
+        /* Dynamic symbol/string tables — lld auto-generates these but they
+         * MUST be explicitly placed in a PT_LOAD segment.  Without this they
+         * land outside any mapped region and rtld_load crashes the instant it
+         * reads DT_SYMTAB/DT_STRTAB from _DYNAMIC. */
+        .gnu.hash : { *(.gnu.hash) } : ph_text
+        .hash     : { *(.hash)     } : ph_text
+        .dynsym   : { *(.dynsym)   } : ph_text
+        .dynstr   : { *(.dynstr)   } : ph_text
+
         .rodata : {
             *(.rodata .rodata.*)
 

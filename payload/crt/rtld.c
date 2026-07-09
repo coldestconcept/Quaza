@@ -364,9 +364,13 @@ dt_needed(const char* basename) {
     return 0;
   }
 
-  klog_printf("Unable to load '%s'\n", basename);
-
-  return -1;
+  /* Non-fatal: log the failure but continue.  Any symbol from this library
+   * will have been left as NULL in the GOT by r_glob_dat(); the first actual
+   * call to such a symbol will SIGSEGV, but the rest of main() can still
+   * run and port 4242 may still open — letting us distinguish "rtld failed
+   * entirely" from "one library missing". */
+  klog_printf("WARN: unable to load '%s' — continuing without it\n", basename);
+  return 0;
 }
 
 
