@@ -49,10 +49,12 @@ struct sockaddr_in6 {
 
 #define IPV6_V6ONLY     26
 
-/* byte-order functions — implemented by libSceLibcInternal.sprx at runtime */
-uint16_t htons(uint16_t hostshort);
-uint32_t htonl(uint32_t hostlong);
-uint16_t ntohs(uint16_t netshort);
-uint32_t ntohl(uint32_t netlong);
+/* Byte-order conversions — implemented as static inlines using compiler
+ * builtins so no library symbol is needed in either stub or SDK mode.
+ * PS5/x86-64 is little-endian; network order is big-endian. */
+static inline uint16_t htons(uint16_t v) { return __builtin_bswap16(v); }
+static inline uint16_t ntohs(uint16_t v) { return __builtin_bswap16(v); }
+static inline uint32_t htonl(uint32_t v) { return __builtin_bswap32(v); }
+static inline uint32_t ntohl(uint32_t v) { return __builtin_bswap32(v); }
 
 #endif
